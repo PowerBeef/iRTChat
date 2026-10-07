@@ -1,0 +1,578 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		300000000000000000000001 /* iRTChatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* iRTChatApp.swift */; };
+		300000000000000000000002 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* AppState.swift */; };
+		300000000000000000000003 /* ChatTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* ChatTypes.swift */; };
+		300000000000000000000004 /* DeviceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* DeviceProfile.swift */; };
+		300000000000000000000005 /* InferencePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000005 /* InferencePlanner.swift */; };
+		300000000000000000000006 /* ChatEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000006 /* ChatEngine.swift */; };
+		300000000000000000000007 /* Tools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000007 /* Tools.swift */; };
+		300000000000000000000008 /* ModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000008 /* ModelCatalog.swift */; };
+		300000000000000000000009 /* ModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000009 /* ModelStore.swift */; };
+		300000000000000000000010 /* ChatHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000010 /* ChatHistory.swift */; };
+		300000000000000000000011 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ContentView.swift */; };
+		300000000000000000000012 /* ThreadListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* ThreadListView.swift */; };
+		300000000000000000000013 /* MessageBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* MessageBubbleView.swift */; };
+		300000000000000000000014 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* ChatView.swift */; };
+		300000000000000000000015 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* AudioRecorder.swift */; };
+		300000000000000000000016 /* ModelLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* ModelLibraryView.swift */; };
+		300000000000000000000017 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* SettingsView.swift */; };
+		300000000000000000000018 /* ImagePreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* ImagePreparer.swift */; };
+		300000000000000000000028 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* Haptics.swift */; };
+		300000000000000000000031 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000031 /* DesignTokens.swift */; };
+		300000000000000000000019 /* InferencePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* InferencePlannerTests.swift */; };
+		300000000000000000000020 /* DeviceProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* DeviceProfileTests.swift */; };
+		300000000000000000000021 /* CalculatorToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* CalculatorToolTests.swift */; };
+		300000000000000000000022 /* StreamAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* StreamAccumulatorTests.swift */; };
+		300000000000000000000023 /* ModelCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* ModelCatalogTests.swift */; };
+		300000000000000000000026 /* ModelStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000027 /* ModelStoreTests.swift */; };
+		300000000000000000000024 /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = 100000000000000000000006 /* LiteRTLM */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		100000000000000000000022 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXContainerItemProxy section */
+		100000000000000000000021 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000002;
+			remoteInfo = iRTChat;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		100000000000000000000016 /* iRTChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iRTChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000017 /* iRTChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iRTChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		200000000000000000000001 /* iRTChatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iRTChatApp.swift; sourceTree = "<group>"; };
+		200000000000000000000002 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		200000000000000000000003 /* ChatTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTypes.swift; sourceTree = "<group>"; };
+		200000000000000000000004 /* DeviceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfile.swift; sourceTree = "<group>"; };
+		200000000000000000000005 /* InferencePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferencePlanner.swift; sourceTree = "<group>"; };
+		200000000000000000000006 /* ChatEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000007 /* Tools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tools.swift; sourceTree = "<group>"; };
+		200000000000000000000008 /* ModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalog.swift; sourceTree = "<group>"; };
+		200000000000000000000009 /* ModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelStore.swift; sourceTree = "<group>"; };
+		200000000000000000000010 /* ChatHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistory.swift; sourceTree = "<group>"; };
+		200000000000000000000011 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		200000000000000000000012 /* ThreadListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadListView.swift; sourceTree = "<group>"; };
+		200000000000000000000013 /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
+		200000000000000000000014 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		200000000000000000000015 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
+		200000000000000000000016 /* ModelLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLibraryView.swift; sourceTree = "<group>"; };
+		200000000000000000000017 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		200000000000000000000018 /* ImagePreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreparer.swift; sourceTree = "<group>"; };
+		200000000000000000000029 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
+		200000000000000000000031 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
+		200000000000000000000019 /* InferencePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferencePlannerTests.swift; sourceTree = "<group>"; };
+		200000000000000000000020 /* DeviceProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfileTests.swift; sourceTree = "<group>"; };
+		200000000000000000000021 /* CalculatorToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorToolTests.swift; sourceTree = "<group>"; };
+		200000000000000000000022 /* StreamAccumulatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAccumulatorTests.swift; sourceTree = "<group>"; };
+		200000000000000000000023 /* ModelCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogTests.swift; sourceTree = "<group>"; };
+		200000000000000000000027 /* ModelStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelStoreTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		100000000000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				300000000000000000000024 /* LiteRTLM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		10000000000000000000000B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		10000000000000000000000D /* Main */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000E /* iRTChat */,
+				100000000000000000000014 /* iRTChatTests */,
+				100000000000000000000015 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		10000000000000000000000E /* iRTChat */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000001 /* iRTChatApp.swift */,
+				200000000000000000000002 /* AppState.swift */,
+				10000000000000000000000F /* Inference */,
+				100000000000000000000010 /* Models */,
+				100000000000000000000011 /* Persistence */,
+				100000000000000000000012 /* Views */,
+				100000000000000000000013 /* Support */,
+			);
+			path = iRTChat;
+			sourceTree = "<group>";
+		};
+		10000000000000000000000F /* Inference */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000003 /* ChatTypes.swift */,
+				200000000000000000000004 /* DeviceProfile.swift */,
+				200000000000000000000005 /* InferencePlanner.swift */,
+				200000000000000000000006 /* ChatEngine.swift */,
+				200000000000000000000007 /* Tools.swift */,
+			);
+			path = Inference;
+			sourceTree = "<group>";
+		};
+		100000000000000000000010 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000008 /* ModelCatalog.swift */,
+				200000000000000000000009 /* ModelStore.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		100000000000000000000011 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000010 /* ChatHistory.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		100000000000000000000012 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000011 /* ContentView.swift */,
+				200000000000000000000012 /* ThreadListView.swift */,
+				200000000000000000000013 /* MessageBubbleView.swift */,
+				200000000000000000000014 /* ChatView.swift */,
+				200000000000000000000015 /* AudioRecorder.swift */,
+				200000000000000000000016 /* ModelLibraryView.swift */,
+				200000000000000000000017 /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		100000000000000000000013 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000018 /* ImagePreparer.swift */,
+				200000000000000000000029 /* Haptics.swift */,
+				200000000000000000000031 /* DesignTokens.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		100000000000000000000014 /* iRTChatTests */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000019 /* InferencePlannerTests.swift */,
+				200000000000000000000020 /* DeviceProfileTests.swift */,
+				200000000000000000000021 /* CalculatorToolTests.swift */,
+				200000000000000000000022 /* StreamAccumulatorTests.swift */,
+				200000000000000000000023 /* ModelCatalogTests.swift */,
+				200000000000000000000027 /* ModelStoreTests.swift */,
+			);
+			path = iRTChatTests;
+			sourceTree = "<group>";
+		};
+		100000000000000000000015 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000016 /* iRTChat.app */,
+				100000000000000000000017 /* iRTChatTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		100000000000000000000002 /* iRTChat */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 10000000000000000000001B /* Build configuration list for PBXNativeTarget "iRTChat" */;
+			buildPhases = (
+				100000000000000000000007 /* Sources */,
+				100000000000000000000008 /* Frameworks */,
+				100000000000000000000009 /* Resources */,
+				100000000000000000000022 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = iRTChat;
+			packageProductDependencies = (
+				100000000000000000000006 /* LiteRTLM */,
+			);
+			productName = iRTChat;
+			productReference = 100000000000000000000016 /* iRTChat.app */;
+			productType = "com.apple.product-type.application";
+		};
+		100000000000000000000003 /* iRTChatTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 10000000000000000000001E /* Build configuration list for PBXNativeTarget "iRTChatTests" */;
+			buildPhases = (
+				10000000000000000000000A /* Sources */,
+				10000000000000000000000B /* Frameworks */,
+				10000000000000000000000C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				100000000000000000000004 /* PBXTargetDependency */,
+			);
+			name = iRTChatTests;
+			productName = iRTChatTests;
+			productReference = 100000000000000000000017 /* iRTChatTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		100000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1700;
+				LastUpgradeCheck = 1700;
+				TargetAttributes = {
+					100000000000000000000002 = {
+						CreatedOnToolsVersion = 17.0;
+					};
+					100000000000000000000003 = {
+						CreatedOnToolsVersion = 17.0;
+						TestTargetID = 100000000000000000000002;
+					};
+				};
+			};
+			buildConfigurationList = 100000000000000000000018 /* Build configuration list for PBXProject "iRTChat" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 10000000000000000000000D;
+			packageReferences = (
+				100000000000000000000005 /* XCLocalSwiftPackageReference "Vendor/LiteRT-LM" */,
+			);
+			productRefGroup = 100000000000000000000015 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				100000000000000000000002 /* iRTChat */,
+				100000000000000000000003 /* iRTChatTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		100000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		10000000000000000000000C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		100000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				300000000000000000000001 /* iRTChatApp.swift in Sources */,
+				300000000000000000000002 /* AppState.swift in Sources */,
+				300000000000000000000003 /* ChatTypes.swift in Sources */,
+				300000000000000000000004 /* DeviceProfile.swift in Sources */,
+				300000000000000000000005 /* InferencePlanner.swift in Sources */,
+				300000000000000000000006 /* ChatEngine.swift in Sources */,
+				300000000000000000000007 /* Tools.swift in Sources */,
+				300000000000000000000008 /* ModelCatalog.swift in Sources */,
+				300000000000000000000009 /* ModelStore.swift in Sources */,
+				300000000000000000000010 /* ChatHistory.swift in Sources */,
+				300000000000000000000011 /* ContentView.swift in Sources */,
+				300000000000000000000012 /* ThreadListView.swift in Sources */,
+				300000000000000000000013 /* MessageBubbleView.swift in Sources */,
+				300000000000000000000014 /* ChatView.swift in Sources */,
+				300000000000000000000015 /* AudioRecorder.swift in Sources */,
+				300000000000000000000016 /* ModelLibraryView.swift in Sources */,
+				300000000000000000000017 /* SettingsView.swift in Sources */,
+				300000000000000000000018 /* ImagePreparer.swift in Sources */,
+				300000000000000000000028 /* Haptics.swift in Sources */,
+				300000000000000000000031 /* DesignTokens.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		10000000000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				300000000000000000000019 /* InferencePlannerTests.swift in Sources */,
+				300000000000000000000020 /* DeviceProfileTests.swift in Sources */,
+				300000000000000000000021 /* CalculatorToolTests.swift in Sources */,
+				300000000000000000000022 /* StreamAccumulatorTests.swift in Sources */,
+				300000000000000000000023 /* ModelCatalogTests.swift in Sources */,
+				300000000000000000000026 /* ModelStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		100000000000000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000002 /* iRTChat */;
+			targetProxy = 100000000000000000000021 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		100000000000000000000019 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		10000000000000000000001A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = s;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		10000000000000000000001C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = iRTChat;
+				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "iRTChat uses the microphone to record voice messages for the on-device model.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "iRTChat lets you attach photos for the on-device model to see.";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.irt.chat;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+			};
+			name = Debug;
+		};
+		10000000000000000000001D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = iRTChat;
+				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "iRTChat uses the microphone to record voice messages for the on-device model.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "iRTChat lets you attach photos for the on-device model to see.";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.irt.chat;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+			};
+			name = Release;
+		};
+		10000000000000000000001F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.irt.chat.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/iRTChat.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/iRTChat";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/../Frameworks",
+				);
+			};
+			name = Debug;
+		};
+		100000000000000000000020 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.irt.chat.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/iRTChat.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/iRTChat";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/../Frameworks",
+				);
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		100000000000000000000018 /* Build configuration list for PBXProject "iRTChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000019 /* Debug */,
+				10000000000000000000001A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		10000000000000000000001B /* Build configuration list for PBXNativeTarget "iRTChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				10000000000000000000001C /* Debug */,
+				10000000000000000000001D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		10000000000000000000001E /* Build configuration list for PBXNativeTarget "iRTChatTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				10000000000000000000001F /* Debug */,
+				100000000000000000000020 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		100000000000000000000005 /* XCLocalSwiftPackageReference "Vendor/LiteRT-LM" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "Vendor/LiteRT-LM";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		100000000000000000000006 /* LiteRTLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 100000000000000000000005 /* XCLocalSwiftPackageReference "Vendor/LiteRT-LM" */;
+			productName = LiteRTLM;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 100000000000000000000001 /* Project object */;
+}

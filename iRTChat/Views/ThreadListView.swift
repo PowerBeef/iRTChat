@@ -1,0 +1,70 @@
+import SwiftData
+import SwiftUI
+
+struct ThreadListView: View {
+  @Environment(AppState.self) private var appState
+  @Environment(\.modelContext) private var context
+  @Query(sort: \ChatThread.createdAt, order: .reverse) private var threads: [ChatThread]
+
+  var body: some View {
+    NavigationStack {
+      Group {
+        if threads.isEmpty {
+          ContentUnavailableView(
+            "No chats yet",
+            systemImage: "sparkles",
+            description: Text("Start a new on-device chat.")
+          )
+        } else {
+          List {
+            ForEach(threads) { thread in
+              NavigationLink(value: thread) {
+                HStack(spacing: 12) {
+                  Image(systemName: "bubble.left.and.text.bubble.right")
+                    .font(.callout)
+                    .frame(width: DS.iconLG, height: DS.iconLG)
+                    .glassEffect(.regular, in: .circle)
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(thread.title).font(.headline).lineLimit(1)
+                    Text(subtitle(for: thread))
+                      .font(.caption)
+                      .foregroundStyle(.secondary)
+                      .lineLimit(1)
+                  }
+                }
+                .padding(.vertical, 2)
+              }
+            }
+            .onDelete(perform: delete)
+          }
+        }
+      }
+      .navigationTitle("Chats")
+      .toolbar {
+        ToolbarItem(placement: .primaryAction) {
+          Button(action: { _ = appState.newThread(in: context) }) {
+            Image(systemName: "square.and.pencil")
+          }
+          .accessibilityLabel("New chat")
+        }
+      }
+      .navigationDestination(for: ChatThread.self) { thread in
+        ChatView(thread: thread)
+      }
+    }
+  }
+
+  private func subtitle(for thread: ChatThread) -> String {
+    let model = ModelCatalog.spec(for: thread.modelID).displayName
+    let count = thread.turns.count
+    let messages = count == 1 ? "1 message" : "\(count) messages"
+    let date = thread.createdAt.formatted(date: .abbreviated, time: .omitted)
+    return "\(model) · \(messages) · \(date)"
+  }
+
+  private func delete(at offsets: IndexSet) {
+    for index in offsets {
+      appState.deleteThread(threads[index], in: context)
+    }
+  }
+}

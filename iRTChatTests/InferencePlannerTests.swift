@@ -1,0 +1,171 @@
+import XCTest
+
+@testable import iRTChat
+
+final class InferencePlannerTests: XCTestCase {
+  private let roomy: UInt64 = 8_000_000_000
+  private let tight: UInt64 = 6_000_000_000
+
+  func testDefaultsE2BRoomy() {
+    let resolved = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+    XCTAssertTrue(resolved.useGPU)
+    XCTAssertEqual(resolved.maxNumTokens, 4096)
+    XCTAssertNil(resolved.thinkingBudget)
+    XCTAssertEqual(resolved.visualTokenBudget, 280)
+    XCTAssertTrue(resolved.enableSpeculativeDecoding)
+    XCTAssertEqual(resolved.topK, 40)
+    XCTAssertEqual(resolved.topP, 0.95)
+    XCTAssertEqual(resolved.temperature, 0.7)
+  }
+
+  func testTightDeviceGetsSmallerCache() {
+    let e2b = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e2b, memoryBytes: tight)
+    XCTAssertEqual(e2b.maxNumTokens, 2048)
+
+    let e4b = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
+    XCTAssertEqual(e4b.maxNumTokens, 2048)
+  }
+
+  func testOverrideIsClamped() {
+    var options = InferenceOptions()
+    options.maxNumTokensOverride = 10
+    XCTAssertEqual(
+      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).maxNumTokens,
+      256)
+    options.maxNumTokensOverride = 100_000
+    XCTAssertEqual(
+      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).maxNumTokens,
+      8192)
+  }
+
+  func testThinkingBudget() {
+    var options = InferenceOptions()
+    options.enableThinking = true
+    options.thinkingBudget = 512
+    XCTAssertEqual(
+      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).thinkingBudget,
+      512)
+
+    options.enableThinking = false
+    XCTAssertNil(
+      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).thinkingBudget)
+  }
+
+  func testVisionOffDropsVisualBudget() {
+    var options = InferenceOptions()
+    options.enableVision = false
+    let resolved = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    XCTAssertFalse(resolved.enableVision)
+    XCTAssertNil(resolved.visualTokenBudget)
+  }
+
+  func testCpuFallbackKeepsEverythingElse() {
+    let plan = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+    let fallback = InferencePlanner.cpuFallback(from: plan)
+    XCTAssertTrue(plan.useGPU)
+    XCTAssertFalse(fallback.useGPU)
+    XCTAssertEqual(fallback.maxNumTokens, plan.maxNumTokens)
+    XCTAssertEqual(fallback.visualTokenBudget, plan.visualTokenBudget)
+    XCTAssertEqual(fallback.thinkingBudget, plan.thinkingBudget)
+  }
+
+  func testAttemptLadderPrefersGPUMultimodal() {
+    let plan = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+    let attempts = InferencePlanner.attempts(for: plan)
+    XCTAssertEqual(attempts.count, 4)
+    XCTAssertEqual(attempts.map(\.useGPU), [true, true, false, false])
+    XCTAssertEqual(attempts.map(\.enableVision), [true, false, true, false])
+    XCTAssertEqual(attempts.map(\.enableAudio), [true, false, true, false])
+    // Text-only attempts drop the visual budget too.
+    XCTAssertNil(attempts[1].visualTokenBudget)
+    XCTAssertEqual(attempts[0].visualTokenBudget, 280)
+  }
+
+  func testAttemptLadderCpuPreferred() {
+    var options = InferenceOptions()
+    options.backendPreference = .cpu
+    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let attempts = InferencePlanner.attempts(for: plan)
+    XCTAssertEqual(attempts.count, 2)
+    XCTAssertTrue(attempts.allSatisfy { !$0.useGPU })
+  }
+
+  func testAttemptLadderDedupesWhenMultimodalOff() {
+    var options = InferenceOptions()
+    options.enableVision = false
+    options.enableAudio = false
+    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let attempts = InferencePlanner.attempts(for: plan)
+    XCTAssertEqual(attempts.count, 2)
+    XCTAssertEqual(attempts.map(\.useGPU), [true, false])
+  }
+
+  func testApplyCapabilitiesDisablesUnsupported() {
+    var options = InferenceOptions()
+    options.enableThinking = true
+    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let caps = ModelCapabilities(
+      speculativeDecoding: false, thinking: false, functionCalling: false,
+      vision: false, audio: false, maxVisionTokenBudget: -1,
+      maxContextTokens: 0, dynamicContext: true)
+    let out = InferencePlanner.applyCapabilities(caps, to: plan)
+    XCTAssertFalse(out.enableSpeculativeDecoding)
+    XCTAssertNil(out.thinkingBudget)
+    XCTAssertFalse(out.enableVision)
+    XCTAssertFalse(out.enableAudio)
+    XCTAssertNil(out.visualTokenBudget)
+    XCTAssertEqual(out.maxNumTokens, plan.maxNumTokens)
+  }
+
+  func testApplyCapabilitiesClampsToModelLimits() {
+    var options = InferenceOptions()
+    options.visualDetail = .detailed // 560
+    options.maxNumTokensOverride = 8192
+    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let caps = ModelCapabilities(
+      speculativeDecoding: true, thinking: true, functionCalling: true,
+      vision: true, audio: true, maxVisionTokenBudget: 280,
+      maxContextTokens: 2048, dynamicContext: false)
+    let out = InferencePlanner.applyCapabilities(caps, to: plan)
+    XCTAssertEqual(out.visualTokenBudget, 280)
+    XCTAssertEqual(out.maxNumTokens, 2048)
+    XCTAssertTrue(out.enableSpeculativeDecoding)
+  }
+
+  func testApplyCapabilitiesFullKeepsPlan() {
+    let plan = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+    XCTAssertEqual(InferencePlanner.applyCapabilities(.full, to: plan), plan)
+  }
+
+  func testCompactReasoningCachePassthrough() {
+    XCTAssertFalse(
+      InferencePlanner.resolve(options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+        .filterThoughtFromCache)
+    var options = InferenceOptions()
+    options.compactReasoningCache = true
+    XCTAssertTrue(
+      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+        .filterThoughtFromCache)
+  }
+
+  func testSamplerPresets() {
+    var options = InferenceOptions()
+    options.samplerPreset = .precise
+    var resolved = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    XCTAssertEqual(resolved.topK, 20)
+    XCTAssertEqual(resolved.topP, 0.9)
+    XCTAssertEqual(resolved.temperature, 0.2)
+
+    options.samplerPreset = .creative
+    resolved = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    XCTAssertEqual(resolved.topK, 60)
+    XCTAssertEqual(resolved.topP, 0.98)
+    XCTAssertEqual(resolved.temperature, 1.0)
+  }
+}
