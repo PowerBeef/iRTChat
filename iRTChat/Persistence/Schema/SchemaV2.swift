@@ -25,7 +25,7 @@ enum SchemaV2: VersionedSchema {
     @Relationship(deleteRule: .cascade, inverse: \ChatTurn.thread)
     var turns: [ChatTurn] = []
 
-    init(title: String = "New chat", modelID: ModelID = .e2b) {
+    init(title: String = "New chat", modelID: ModelID = .e4b) {
       self.id = UUID()
       self.title = title
       self.createdAt = Date()

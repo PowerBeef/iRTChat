@@ -92,24 +92,30 @@ final class AppState {
     {
       self.benchmarkReport = report
     }
-    // OOM guard: E4B + memory pressure = stop generation before jetsam kills us.
+    // iOS sends memory warnings long before it terminates apps (E4B kept
+    // working with ~0.8 GB left in the 8 GB simulation), so only stop a reply
+    // when memory is actually nearly exhausted (also checked while streaming).
     memoryWarningObserver = NotificationCenter.default.addObserver(
       forName: UIApplication.didReceiveMemoryWarningNotification, object: nil,
       queue: .main
     ) { [weak self] _ in
       guard let self else { return }
       Log.lifecycle.warning("memory warning (\(MemoryProbe.summary, privacy: .public))")
-      Task { @MainActor in
-        if self.isGenerating, await self.engine.currentModelID == .e4b {
-          await self.engine.cancel()
-          self.generationError =
-            "Stopped to protect memory. E4B is tight on this device — try E2B."
-        }
-      }
+      Task { @MainActor in self.stopIfMemoryIsExhausted() }
     }
   }
 
   var isMock: Bool { engine is MockChatEngine }
+
+  /// Stop a running reply (keeping its text) if the app is about to run out
+  /// of memory.
+  private func stopIfMemoryIsExhausted() {
+    guard isGenerating, DeviceProfile.shouldStopForMemory(availableBytes: MemoryProbe.availableBytes())
+    else { return }
+    Log.lifecycle.error("low memory: stopping reply (\(MemoryProbe.summary, privacy: .public))")
+    stop()
+    generationError = "Reply stopped to free memory. Closing other apps can help."
+  }
 
   private func persistOptions() {
     if let data = try? JSONEncoder().encode(options) {
@@ -167,11 +173,6 @@ final class AppState {
       }
       url = local
     }
-    if spec.requiresRoomyDevice, !DeviceProfile.current.supportsE4B {
-      engineState = .failed(
-        message: "\(spec.displayName) needs an 8 GB-class iPhone. Using E2B is advised.")
-      return false
-    }
     engineState = .loading(progress: "Loading \(spec.displayName)…")
     // `load` replaces the native conversation with an empty one.
     conversationThreadID = nil
@@ -198,19 +199,6 @@ final class AppState {
     conversationThreadID = nil
     conversationIsEmpty = true
     engineState = .idle
-  }
-
-  func switchModel(to id: ModelID) async {
-    await serialized {
-      guard !self.isGenerating, !self.isBenchmarking else {
-        self.generationError = "Wait for the current reply to finish before switching models."
-        return
-      }
-      if self.store.activeModelID == id, await self.isActiveModelLoaded() { return }
-      await self.unloadEngine()
-      self.store.activeModelID = id
-      _ = await self.loadIfNeeded()
-    }
   }
 
   /// Delete a downloaded model, unloading it first if the engine holds it.
@@ -288,23 +276,21 @@ final class AppState {
   // MARK: - Threads ↔ native conversation
 
   /// Make `thread` the conversation the native engine holds. Loads the model
-  /// when the thread uses the active model and replays the thread's text
-  /// history, so context never bleeds between chats (or is lost on relaunch).
+  /// if needed and replays the thread's text history, so context never bleeds
+  /// between chats (or is lost on relaunch).
   @discardableResult
   func activate(_ thread: ChatThread) async -> Bool {
     selectedThreadID = thread.id
     let threadID = thread.id
-    let modelID = thread.modelID
     let history = thread.textHistory
     return await serialized {
-      await self.prepareConversation(threadID: threadID, modelID: modelID, history: history)
+      await self.prepareConversation(threadID: threadID, history: history)
     }
   }
 
   private func prepareConversation(
-    threadID: UUID, modelID: ModelID, history: [(role: ChatRole, text: String)]
+    threadID: UUID, history: [(role: ChatRole, text: String)]
   ) async -> Bool {
-    guard modelID == store.activeModelID else { return false }
     guard await loadIfNeeded() else { return false }
     if conversationThreadID == threadID { return true }
     // Never swap the conversation out from under a live reply.
@@ -338,11 +324,6 @@ final class AppState {
     let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !prompt.isEmpty || imageData != nil || audioFileURL != nil else { return false }
 
-    guard thread.modelID == store.activeModelID else {
-      generationError =
-        "This chat uses \(ModelCatalog.spec(for: thread.modelID).displayName). Tap Switch to continue it."
-      return false
-    }
     guard await activate(thread) else { return false }
 
     // The engine may have degraded to text-only (model without executors).
@@ -484,7 +465,10 @@ final class AppState {
         case .chunk(let chunk):
           accumulator.append(chunk)
           if let latest = chunk.toolActivity.last { toolStatus = latest.summary }
-          if ContinuousClock.now - lastFlush >= .milliseconds(100) { flush() }
+          if ContinuousClock.now - lastFlush >= .milliseconds(100) {
+            flush()
+            stopIfMemoryIsExhausted()
+          }
         case .finished(let stats):
           reply.stats = stats
         }

@@ -18,32 +18,20 @@ final class CalibrationScenarioTests: DeviceTestCase {
     }
   }
 
-  override func tearDown() async throws {
-    try await super.tearDown()
-    await appState.switchModel(to: .e2b)
-  }
-
-  func test01_CalibrateE2B() async throws {
-    try await calibrate(.e2b)
-  }
-
-  func test02_CalibrateE4B() async throws {
-    guard appState.store.isDownloaded(ModelCatalog.e4b) else {
-      throw XCTSkip("E4B not downloaded (run the e4b suite first)")
-    }
+  func test01_CalibrateE4B() async throws {
     try await calibrate(.e4b)
   }
 
   private func calibrate(_ model: ModelID) async throws {
-    if model == .e2b { _ = try await harness.ensureDownloaded(ModelCatalog.e2b) }
-    await appState.switchModel(to: model)
+    _ = try await harness.ensureDownloaded(ModelCatalog.e4b, timeout: 5400)
     let limitGB = Double(DeviceProfile.current.appMemoryLimitBytes ?? 0) / 1e9
     for window in Self.windows {
       appState.options.maxNumTokensOverride = window
       await appState.applyCurrentOptions()
+      await appState.ensureEngineLoaded()
       let loadLog = await harness.liveEngine?.loadLog ?? []
       let afterLoad = MemoryProbe.footprintBytes()
-      // The model file may cap its context (E2B: 32,003 tokens).
+      // The model file may cap its context.
       let effective = appState.resolved?.maxNumTokens ?? 0
       let loaded = appState.engineState == .ready && effective >= min(window, 32_000)
       var values: [String: Any] = [

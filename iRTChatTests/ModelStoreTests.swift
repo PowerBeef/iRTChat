@@ -1,32 +1,20 @@
-import Observation
 import XCTest
 
 @testable import iRTChat
-
-private final class Flag: @unchecked Sendable {
-  var value = false
-}
 
 /// Regression tests for the download-finishing path: the temp file must be
 /// moved synchronously and size-verified (async hops let the system delete it).
 final class ModelStoreTests: XCTestCase {
   private var scratch: URL!
-  private var savedActiveModelID: String?
 
   override func setUpWithError() throws {
     scratch = FileManager.default.temporaryDirectory
       .appendingPathComponent("ModelStoreTests-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
-    savedActiveModelID = UserDefaults.standard.string(forKey: "activeModelID")
   }
 
   override func tearDownWithError() throws {
     try? FileManager.default.removeItem(at: scratch)
-    if let savedActiveModelID {
-      UserDefaults.standard.set(savedActiveModelID, forKey: "activeModelID")
-    } else {
-      UserDefaults.standard.removeObject(forKey: "activeModelID")
-    }
   }
 
   func testPlaceDownloadedFileMovesAndVerifies() throws {
@@ -89,7 +77,7 @@ final class ModelStoreTests: XCTestCase {
   }
 
   func testStorageCheckRequiresFileSizePlusMargin() {
-    let spec = ModelCatalog.e2b
+    let spec = ModelCatalog.e4b
     XCTAssertTrue(ModelStore.hasRoom(for: spec, availableBytes: nil))
     XCTAssertTrue(
       ModelStore.hasRoom(for: spec, availableBytes: spec.sizeBytes + ModelStore.storageMargin))
@@ -97,7 +85,7 @@ final class ModelStoreTests: XCTestCase {
   }
 
   func testErrorPagesAreRejected() throws {
-    let url = ModelCatalog.e2b.downloadURL
+    let url = ModelCatalog.e4b.downloadURL
     let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
     let missing = HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)
     XCTAssertNoThrow(try ModelStore.validateResponse(ok))
@@ -106,51 +94,12 @@ final class ModelStoreTests: XCTestCase {
     }
   }
 
-  /// Starting a second download used to leave the first stuck on
-  /// "Downloading…" with dead Pause/Cancel buttons.
+  /// After the switch to E4B only, the old E2B file (2.6 GB) must be removed.
   @MainActor
-  func testStartingAnotherDownloadPausesTheFirst() {
-    let store = ModelStore()
-    guard !store.isDownloaded(ModelCatalog.e2b), !store.isDownloaded(ModelCatalog.e4b) else {
-      return
-    }
-    store.startDownload(ModelCatalog.e2b)
-    store.startDownload(ModelCatalog.e4b)
-    defer {
-      store.cancelDownload(ModelCatalog.e4b)
-      store.cancelDownload(ModelCatalog.e2b)
-    }
-    guard case .paused = store.states[.e2b] else {
-      return XCTFail("First download should be paused, is \(String(describing: store.states[.e2b]))")
-    }
-    guard case .downloading = store.states[.e4b] else {
-      return XCTFail("Second download should be active, is \(String(describing: store.states[.e4b]))")
-    }
-  }
-
-  // MARK: - Active model selection
-
-  @MainActor
-  func testActiveModelIDPersistsAcrossInstances() {
-    let store = ModelStore()
-    let other: ModelID = store.activeModelID == .e2b ? .e4b : .e2b
-    store.activeModelID = other
-    XCTAssertEqual(ModelStore().activeModelID, other)
-  }
-
-  @MainActor
-  func testActiveModelIDChangeNotifiesObservers() {
-    // "Use this model" must move the Active badge and refresh pickers:
-    // a UserDefaults-backed computed property emits no observation.
-    let store = ModelStore()
-    let other: ModelID = store.activeModelID == .e2b ? .e4b : .e2b
-    let flag = Flag()
-    withObservationTracking {
-      _ = store.activeModelID
-    } onChange: {
-      flag.value = true
-    }
-    store.activeModelID = other
-    XCTAssertTrue(flag.value)
+  func testRetiredModelFilesAreRemoved() throws {
+    let retired = try ModelStore.modelsDirectory().appendingPathComponent("gemma-4-E2B-it.litertlm")
+    try Data(repeating: 0, count: 16).write(to: retired)
+    _ = ModelStore()
+    XCTAssertFalse(FileManager.default.fileExists(atPath: retired.path))
   }
 }

@@ -8,7 +8,7 @@ import XCTest
 /// scripted mock engine with an in-memory store.
 @MainActor
 final class AppStateTests: XCTestCase {
-  private static let defaultsKeys = ["activeModelID", "selectedThreadID", "inferenceOptions"]
+  private static let defaultsKeys = ["selectedThreadID", "inferenceOptions"]
   private var savedDefaults: [String: Any] = [:]
   private var container: ModelContainer!
   private var appState: AppState!
@@ -23,7 +23,6 @@ final class AppStateTests: XCTestCase {
       for: ChatThread.self, ChatTurn.self,
       configurations: ModelConfiguration(isStoredInMemoryOnly: true))
     appState = AppState(useMockEngine: true)
-    appState.store.activeModelID = .e2b
     appState.modelContext = container.mainContext
   }
 
@@ -127,17 +126,6 @@ final class AppStateTests: XCTestCase {
     await appState.send(text: "Hi there", imageData: nil, audioFileURL: nil, in: thread)
     XCTAssertEqual(thread.title, "Hi there")
   }
-
-  func testSendRejectedForOtherModelsThreadPersistsNothing() async {
-    let thread = ChatThread(modelID: .e4b)
-    context.insert(thread)
-    let accepted = await appState.send(text: "Hi", imageData: nil, audioFileURL: nil, in: thread)
-    XCTAssertFalse(accepted)
-    XCTAssertTrue(thread.turns.isEmpty)
-    XCTAssertNotNil(appState.generationError)
-  }
-
-  // MARK: - Stop (device finding: next message failed with CANCELLED)
 
   func testStoppedConversationIsRebuiltBeforeTheNextMessage() async throws {
     let thread = appState.newThread(in: context)

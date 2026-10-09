@@ -34,12 +34,10 @@ private struct ModelCardView: View {
     appState.store.states[spec.id] ?? .notDownloaded
   }
 
-  private var isActive: Bool { appState.store.activeModelID == spec.id }
-
   var body: some View {
     VStack(alignment: .leading, spacing: DS.spaceMD) {
       HStack(spacing: 12) {
-        Image(systemName: spec.requiresRoomyDevice ? "cpu.fill" : "bolt.fill")
+        Image(systemName: "sparkles")
           .font(.callout)
           .frame(width: DS.iconLG, height: DS.iconLG)
           .glassEffect(.regular.tint(.accentColor), in: .circle)
@@ -48,25 +46,8 @@ private struct ModelCardView: View {
           Text(spec.tagline).font(.caption).foregroundStyle(.secondary)
         }
         Spacer()
-        if isActive {
-          Text("Active")
-            .font(.caption2).bold()
-            .accessibilityIdentifier("models.active.\(spec.id.rawValue)")
-            .padding(.horizontal, 10)
-            .padding(.vertical, DS.spaceXS)
-            .glassEffect(.regular.tint(.accentColor), in: .capsule)
-        }
       }
       Text(spec.sizeDisplay).font(.caption).foregroundStyle(.secondary)
-
-      if spec.requiresRoomyDevice, !DeviceProfile.current.supportsE4B {
-        Label(
-          "Not advised on this device (\(DeviceProfile.current.summary)).",
-          systemImage: "exclamationmark.triangle"
-        )
-        .font(.caption)
-        .foregroundStyle(.orange)
-      }
 
       controls
     }
@@ -108,14 +89,10 @@ private struct ModelCardView: View {
       }
     case .ready:
       HStack {
-        if !isActive {
-          Button("Use this model") {
-            Task { await appState.switchModel(to: spec.id) }
-          }
-          .buttonStyle(.glassProminent)
-          .controlSize(.small)
-          .accessibilityIdentifier("models.use.\(spec.id.rawValue)")
-        }
+        Label("Ready", systemImage: "checkmark.circle.fill")
+          .font(.caption)
+          .foregroundStyle(.green)
+          .accessibilityIdentifier("models.ready.\(spec.id.rawValue)")
         Spacer()
         Button("Delete", role: .destructive) { Task { await appState.deleteModel(spec) } }
           .buttonStyle(.glass)

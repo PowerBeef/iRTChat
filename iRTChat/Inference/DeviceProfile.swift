@@ -25,28 +25,17 @@ struct DeviceProfile: Sendable, Equatable {
 
   // MARK: - Policy (pure)
 
-  /// Minimum app memory limit for Gemma 4 E4B: ~1.1 GB after load, ~2.3 GB
-  /// with vision/audio executors and a 2K KV cache (measured on iPhone 17
-  /// Pro), plus headroom for the UI and image decoding.
-  static let e4bMinimumAppLimit: UInt64 = 4_500_000_000
+  /// Free memory below which a running reply is stopped to avoid being
+  /// terminated by the system. Measured: E4B kept working with ~0.8 GB left,
+  /// so iOS memory warnings alone (sent much earlier) are not a reason to stop.
+  static let lowMemoryStopBytes: UInt64 = 400_000_000
 
-  /// Whether E4B is safe to run. Uses the app's real memory limit when known
-  /// (a 12 GB iPhone allows only ~3.5 GB without the increased-memory-limit
-  /// entitlement); otherwise falls back to physical RAM (8 GB-class devices).
-  static func supportsE4B(physicalMemoryBytes: UInt64, appMemoryLimitBytes: UInt64?) -> Bool {
-    if let appMemoryLimitBytes {
-      return appMemoryLimitBytes >= e4bMinimumAppLimit
-    }
-    return physicalMemoryBytes >= 7_000_000_000
-  }
-
-  var supportsE4B: Bool {
-    Self.supportsE4B(
-      physicalMemoryBytes: physicalMemoryBytes, appMemoryLimitBytes: appMemoryLimitBytes)
+  static func shouldStopForMemory(availableBytes: UInt64) -> Bool {
+    availableBytes > 0 && availableBytes < lowMemoryStopBytes
   }
 
   /// Everyday chat context. Calibrated on iPhone 17 Pro: a larger KV cache
-  /// slows *every* reply (E2B decode 83 → 69 → 54 → 40 tok/s at 4K → 8K →
+  /// slows *every* reply (E4B decode 43 → 38 → 34 → 27 tok/s at 4K → 8K →
   /// 16K → 32K), so chat stays at 8K and long inputs use ``maxContextTokens``.
   static let standardContextTokens = 8_192
 
@@ -57,14 +46,11 @@ struct DeviceProfile: Sendable, Equatable {
   }
 
   /// Largest context worth loading for long inputs (files, web passages).
-  /// Measured peaks at 32K with a third of it filled: E2B 2.8 GB, E4B 3.6 GB.
-  /// The model file may cap it further (E2B: 32,003).
+  /// Measured E4B peak at 32K with a third of it filled: 3.6 GB; 16K stays
+  /// within the ~3.5 GB worst case simulated for 8 GB iPhones.
   static func maxContextTokens(model: ModelID, appMemoryLimitBytes: UInt64?) -> Int {
     guard let limit = appMemoryLimitBytes else { return 16_384 }
-    switch model {
-    case .e2b: return limit >= 4_500_000_000 ? 32_768 : 16_384
-    case .e4b: return limit >= 6_500_000_000 ? 32_768 : 16_384
-    }
+    return limit >= 6_500_000_000 ? 32_768 : 16_384
   }
 
   func maxContextTokens(model: ModelID) -> Int {
@@ -81,7 +67,6 @@ struct DeviceProfile: Sendable, Equatable {
     if let appMemoryLimitBytes {
       parts.append(String(format: "app limit %.1f GB", Double(appMemoryLimitBytes) / 1e9))
     }
-    parts.append(supportsE4B ? "E4B supported" : "E4B not advised")
     return parts.joined(separator: " · ")
   }
 }

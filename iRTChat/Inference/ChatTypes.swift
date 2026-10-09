@@ -2,12 +2,17 @@ import Foundation
 
 // MARK: - Model identity
 
-/// Edge-size Gemma 4 models supported by the app.
+/// The chat model. iRTChat runs Gemma 4 E4B only; chats stored with other
+/// identifiers (e.g. "e2b" from earlier versions) continue on E4B.
 enum ModelID: String, Codable, Sendable, CaseIterable, Identifiable {
-  case e2b
   case e4b
 
   var id: String { rawValue }
+
+  /// Decodes stored identifiers, mapping retired models to E4B.
+  init(storedValue: String) {
+    self = ModelID(rawValue: storedValue) ?? .e4b
+  }
 }
 
 // MARK: - User-facing inference options

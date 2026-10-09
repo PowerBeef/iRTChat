@@ -17,7 +17,6 @@ struct ChatView: View {
     // Sorted once per render (not per use: this re-renders while streaming).
     let turns = thread.orderedTurns
     VStack(spacing: 0) {
-      mismatchBanner
       engineBanner
       noticeBanner
       messagesList(turns)
@@ -53,31 +52,6 @@ struct ChatView: View {
   }
 
   // MARK: - Banners
-
-  @ViewBuilder
-  private var mismatchBanner: some View {
-    if thread.modelID != appState.store.activeModelID {
-      HStack {
-        Text("This chat uses \(ModelCatalog.spec(for: thread.modelID).displayName).")
-          .font(.caption)
-        Spacer()
-        Button("Switch") {
-          Task {
-            await appState.switchModel(to: thread.modelID)
-            await appState.activate(thread)
-          }
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-      }
-      .padding(DS.padMD)
-      .glassEffect(.regular, in: .rect(cornerRadius: DS.radiusBanner))
-      .padding(.horizontal)
-      .padding(.top, 6)
-      .accessibilityElement(children: .contain)
-      .accessibilityIdentifier("chat.banner.mismatch")
-    }
-  }
 
   @ViewBuilder
   private var engineBanner: some View {

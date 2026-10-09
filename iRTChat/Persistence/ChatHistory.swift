@@ -14,7 +14,7 @@ enum ChatStore {
 
 extension SchemaV2.ChatThread {
   var modelID: ModelID {
-    get { ModelID(rawValue: modelIDRaw) ?? .e2b }
+    get { ModelID(storedValue: modelIDRaw) }
     set { modelIDRaw = newValue.rawValue }
   }
 

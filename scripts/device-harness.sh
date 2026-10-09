@@ -2,16 +2,17 @@
 # On-device test harness for iRTChat (physical iPhone only).
 #
 # Usage:
-#   scripts/device-harness.sh [inference|ui|e4b|all] [extra xcodebuild args...]
+#   scripts/device-harness.sh [inference|ui|all|thinking|memory|calibrate|probes] [extra xcodebuild args...]
 #
 #   inference  In-app scenarios through the real engine (download, load, text,
 #              chat isolation, stop, tools, thinking, image, audio, settings
-#              round-trip, context limit, benchmark). Downloads E2B if missing.
+#              round-trip, context limit, titles, benchmark). Downloads E4B if missing.
 #   ui         Real-tap flows (send, Stop, Home button mid-reply, leave/return
-#              mid-reply, rapid Settings changes, Models tab). Needs E2B downloaded.
-#   e4b        Opt-in E4B scenarios (3.7 GB download).
+#              mid-reply, rapid Settings changes, Models tab). Needs E4B downloaded.
+#   thinking   Long Thinking-mode scenarios (issue #703 prompt, budgets up to 2K).
 #   calibrate  Context-size calibration: memory and speed at 4K-32K KV caches.
 #   probes     LiteRT-LM feature probes (helper conversation, JSON, embeddings).
+#   memory     8 GB iPhone memory simulation (E4B at 5.0/4.0/3.5 GB usable).
 #   all        inference, then ui.
 #
 # Env: DEVICE_ID (default: deviceId from the git-ignored .mobilebuildmcp/config.yaml),
@@ -70,7 +71,14 @@ status=0
 case "$SUITE" in
   inference) run_suite inference -only-testing:iRTChatDeviceTests/InferenceScenarioTests "$@" || status=$? ;;
   ui) run_suite ui -only-testing:iRTChatUITests "$@" || status=$? ;;
-  e4b) export TEST_RUNNER_HARNESS_E4B=1; run_suite e4b -only-testing:iRTChatDeviceTests/E4BScenarioTests "$@" || status=$? ;;
+  thinking)
+    export TEST_RUNNER_HARNESS_THINKING=1
+    run_suite thinking -only-testing:iRTChatDeviceTests/ThinkingScenarioTests "$@" || status=$?
+    ;;
+  memory)
+    export TEST_RUNNER_HARNESS_MEMORY=1
+    run_suite memory -only-testing:iRTChatDeviceTests/MemoryEnvelopeScenarioTests "$@" || status=$?
+    ;;
   probes)
     export TEST_RUNNER_HARNESS_PROBES=1
     run_suite probes -only-testing:iRTChatDeviceTests/ProbeScenarioTests "$@" || status=$?

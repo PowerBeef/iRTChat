@@ -8,7 +8,7 @@ final class InferencePlannerTests: XCTestCase {
 
   func testDefaultsE2BRoomy() {
     let resolved = InferencePlanner.resolve(
-      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+      options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
     XCTAssertTrue(resolved.useGPU)
     XCTAssertEqual(resolved.maxNumTokens, 8192)
     XCTAssertNil(resolved.thinkingBudget)
@@ -20,9 +20,9 @@ final class InferencePlannerTests: XCTestCase {
   }
 
   func testTightDeviceGetsSmallerCache() {
-    let e2b = InferencePlanner.resolve(
-      options: InferenceOptions(), model: .e2b, memoryBytes: tight)
-    XCTAssertEqual(e2b.maxNumTokens, 4096)
+    let tightPlan = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e4b, memoryBytes: tight)
+    XCTAssertEqual(tightPlan.maxNumTokens, 4096)
 
     let e4b = InferencePlanner.resolve(
       options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
@@ -33,11 +33,11 @@ final class InferencePlannerTests: XCTestCase {
     var options = InferenceOptions()
     options.maxNumTokensOverride = 10
     XCTAssertEqual(
-      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).maxNumTokens,
+      InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy).maxNumTokens,
       256)
     options.maxNumTokensOverride = 200_000
     XCTAssertEqual(
-      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).maxNumTokens,
+      InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy).maxNumTokens,
       InferencePlanner.maxTokens)
   }
 
@@ -46,25 +46,25 @@ final class InferencePlannerTests: XCTestCase {
     options.enableThinking = true
     options.thinkingBudget = 512
     XCTAssertEqual(
-      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).thinkingBudget,
+      InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy).thinkingBudget,
       512)
 
     options.enableThinking = false
     XCTAssertNil(
-      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).thinkingBudget)
+      InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy).thinkingBudget)
   }
 
   func testVisionOffDropsVisualBudget() {
     var options = InferenceOptions()
     options.enableVision = false
-    let resolved = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let resolved = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
     XCTAssertFalse(resolved.enableVision)
     XCTAssertNil(resolved.visualTokenBudget)
   }
 
   func testAttemptLadderPrefersGPUMultimodal() {
     let plan = InferencePlanner.resolve(
-      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+      options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
     let attempts = InferencePlanner.attempts(for: plan)
     XCTAssertEqual(attempts.count, 4)
     XCTAssertEqual(attempts.map(\.useGPU), [true, true, false, false])
@@ -78,7 +78,7 @@ final class InferencePlannerTests: XCTestCase {
   func testAttemptLadderCpuPreferred() {
     var options = InferenceOptions()
     options.backendPreference = .cpu
-    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let plan = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
     let attempts = InferencePlanner.attempts(for: plan)
     XCTAssertEqual(attempts.count, 2)
     XCTAssertTrue(attempts.allSatisfy { !$0.useGPU })
@@ -88,7 +88,7 @@ final class InferencePlannerTests: XCTestCase {
     var options = InferenceOptions()
     options.enableVision = false
     options.enableAudio = false
-    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let plan = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
     let attempts = InferencePlanner.attempts(for: plan)
     XCTAssertEqual(attempts.count, 2)
     XCTAssertEqual(attempts.map(\.useGPU), [true, false])
@@ -97,7 +97,7 @@ final class InferencePlannerTests: XCTestCase {
   func testApplyCapabilitiesDisablesUnsupported() {
     var options = InferenceOptions()
     options.enableThinking = true
-    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let plan = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
     let caps = ModelCapabilities(
       speculativeDecoding: false, thinking: false, functionCalling: false,
       vision: false, audio: false, maxVisionTokenBudget: -1,
@@ -117,7 +117,7 @@ final class InferencePlannerTests: XCTestCase {
     var options = InferenceOptions()
     options.visualDetail = .detailed // 560
     options.maxNumTokensOverride = 8192
-    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let plan = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
     let caps = ModelCapabilities(
       speculativeDecoding: true, thinking: true, functionCalling: true,
       vision: true, audio: true, maxVisionTokenBudget: 280,
@@ -130,18 +130,18 @@ final class InferencePlannerTests: XCTestCase {
 
   func testApplyCapabilitiesFullKeepsPlan() {
     let plan = InferencePlanner.resolve(
-      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+      options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
     XCTAssertEqual(InferencePlanner.applyCapabilities(.full, to: plan), plan)
   }
 
   func testCompactReasoningCachePassthrough() {
     XCTAssertFalse(
-      InferencePlanner.resolve(options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+      InferencePlanner.resolve(options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
         .filterThoughtFromCache)
     var options = InferenceOptions()
     options.compactReasoningCache = true
     XCTAssertTrue(
-      InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+      InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
         .filterThoughtFromCache)
   }
 
@@ -149,7 +149,7 @@ final class InferencePlannerTests: XCTestCase {
 
   func testEngineLevelChangesRequireReload() {
     let base = InferencePlanner.resolve(
-      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+      options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
     for mutate in [
       { (o: inout InferenceOptions) in o.enableVision = false },
       { (o: inout InferenceOptions) in o.enableAudio = false },
@@ -159,34 +159,34 @@ final class InferencePlannerTests: XCTestCase {
     ] {
       var options = InferenceOptions()
       mutate(&options)
-      let requested = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+      let requested = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
       XCTAssertTrue(InferencePlanner.requiresEngineReload(built: base, requested: requested))
     }
   }
 
   func testConversationLevelChangesDoNotReload() {
     let base = InferencePlanner.resolve(
-      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+      options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
     var options = InferenceOptions()
     options.samplerPreset = .creative
     options.enableThinking = true
     options.visualDetail = .detailed
     options.compactReasoningCache = true
     options.systemPrompt = "Be terse."
-    let requested = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let requested = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
     XCTAssertFalse(InferencePlanner.requiresEngineReload(built: base, requested: requested))
   }
 
   func testConversationUpdateKeepsEngineFallbacks() {
     var engine = InferencePlanner.resolve(
-      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+      options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
     engine.useGPU = false  // GPU failed at load
     engine.enableVision = false  // no vision executor
     engine.visualTokenBudget = nil
     var options = InferenceOptions()
     options.samplerPreset = .precise
     options.visualDetail = .detailed
-    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let plan = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
     let updated = InferencePlanner.conversationUpdate(engine: engine, plan: plan)
     XCTAssertFalse(updated.useGPU)
     XCTAssertFalse(updated.enableVision, "Must not claim vision the engine lacks")
@@ -197,13 +197,13 @@ final class InferencePlannerTests: XCTestCase {
   func testSamplerPresets() {
     var options = InferenceOptions()
     options.samplerPreset = .precise
-    var resolved = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    var resolved = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
     XCTAssertEqual(resolved.topK, 20)
     XCTAssertEqual(resolved.topP, 0.9)
     XCTAssertEqual(resolved.temperature, 0.2)
 
     options.samplerPreset = .creative
-    resolved = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    resolved = InferencePlanner.resolve(options: options, model: .e4b, memoryBytes: roomy)
     XCTAssertEqual(resolved.topK, 60)
     XCTAssertEqual(resolved.topP, 0.98)
     XCTAssertEqual(resolved.temperature, 1.0)

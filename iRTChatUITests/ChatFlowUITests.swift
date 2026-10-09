@@ -139,11 +139,16 @@ final class ChatFlowUITests: XCTestCase {
       app.descendants(matching: .any).matching(identifier: "threads.row").count, 2)
   }
 
-  /// Audit #5: the Active badge reflects the active model.
-  func testModelsTabShowsActiveModel() throws {
+  /// E4B is the only model: its card shows Ready (device) or Download.
+  func testModelsTabShowsTheModel() throws {
     app.tabBars.buttons["Models"].tap()
-    XCTAssertTrue(element("models.active.e2b").waitForExistence(timeout: 5))
-    XCTAssertFalse(element("models.active.e4b").exists)
+    let ready = element("models.ready.e4b")
+    let download = element("models.download.e4b")
+    XCTAssertTrue(
+      ready.waitForExistence(timeout: 5) || download.exists, "E4B card missing")
+    if !Self.isSimulator {
+      XCTAssertTrue(ready.exists, "E4B should be downloaded on the test device")
+    }
     attachScreenshot("models")
   }
 

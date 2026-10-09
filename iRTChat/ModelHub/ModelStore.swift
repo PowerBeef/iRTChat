@@ -13,17 +13,12 @@ final class ModelStore: NSObject {
     case failed(message: String)
   }
 
-  private(set) var states: [ModelID: DownloadState] = [.e2b: .notDownloaded, .e4b: .notDownloaded]
+  private(set) var states: [ModelID: DownloadState] = [.e4b: .notDownloaded]
 
-  /// Stored (not computed from UserDefaults) so observation tracking fires:
-  /// the Active badge, pickers, and banners must update when it changes.
-  var activeModelID: ModelID {
-    didSet { UserDefaults.standard.set(activeModelID.rawValue, forKey: Self.activeModelKey) }
-  }
+  /// The one chat model (Gemma 4 E4B).
+  let activeModelID: ModelID = .e4b
 
-  private static let activeModelKey = "activeModelID"
-
-  var activeSpec: ModelSpec { ModelCatalog.spec(for: activeModelID) }
+  var activeSpec: ModelSpec { ModelCatalog.e4b }
 
   @ObservationIgnored
   private var session: URLSession!
@@ -35,10 +30,9 @@ final class ModelStore: NSObject {
   private var resumeData: [ModelID: Data] = [:]
 
   override init() {
-    activeModelID =
-      UserDefaults.standard.string(forKey: Self.activeModelKey).flatMap(ModelID.init(rawValue:))
-      ?? .e2b
     super.init()
+    // Retired preference from the two-model era.
+    UserDefaults.standard.removeObject(forKey: "activeModelID")
     let config = URLSessionConfiguration.default
     config.timeoutIntervalForRequest = 60
     config.timeoutIntervalForResource = 0 // large files; no total timeout

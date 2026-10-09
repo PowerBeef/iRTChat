@@ -15,9 +15,9 @@ final class ProbeScenarioTests: DeviceTestCase {
   }
 
   private func gemmaEngine(maxNumTokens: Int = 8_192) async throws -> Engine {
-    _ = try await harness.ensureDownloaded(ModelCatalog.e2b)
+    _ = try await harness.ensureDownloaded(ModelCatalog.e4b)
     await appState.engine.unload()
-    let url = try XCTUnwrap(appState.store.localURL(for: ModelCatalog.e2b))
+    let url = try XCTUnwrap(appState.store.localURL(for: ModelCatalog.e4b))
     let engine = Engine(
       engineConfig: try EngineConfig(
         modelPath: url.path, backend: .gpu, maxNumTokens: maxNumTokens,

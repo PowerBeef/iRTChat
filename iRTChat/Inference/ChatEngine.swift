@@ -642,7 +642,7 @@ actor MockChatEngine: ChatEngineProtocol {
       ChatChunk(textDelta: " from", thoughtDelta: " a reply"),
       ChatChunk(textDelta: " the mock engine!", thoughtDelta: nil),
     ],
-    modelID: ModelID = .e2b
+    modelID: ModelID = .e4b
   ) {
     self.script = script
     self.stats = GenerationStats(

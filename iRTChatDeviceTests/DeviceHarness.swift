@@ -33,7 +33,7 @@ final class DeviceHarness {
   let baselineOptions = InferenceOptions()
 
   private static let defaultsKeys = [
-    "inferenceOptions", "enableTools", "selectedThreadID", "activeModelID", "benchmarkReport",
+    "inferenceOptions", "enableTools", "selectedThreadID", "benchmarkReport",
   ]
   private var savedDefaults: [String: Any] = [:]
   private var report: [String: Any] = [:]
@@ -54,7 +54,6 @@ final class DeviceHarness {
     appState.modelContext = container.mainContext
     appState.options = baselineOptions
     appState.enableTools = true
-    appState.store.activeModelID = .e2b
     // Long downloads and generations must not be interrupted by auto-lock.
     UIApplication.shared.isIdleTimerDisabled = true
     report["device"] = [
@@ -265,13 +264,12 @@ class DeviceTestCase: XCTestCase {
     super.tearDown()
   }
 
-  /// Ensure E2B is downloaded and loaded; skips the scenario otherwise.
-  func requireLoadedE2B() async throws {
-    if appState.store.activeModelID != .e2b { await appState.switchModel(to: .e2b) }
-    _ = try await harness.ensureDownloaded(ModelCatalog.e2b)
+  /// Ensure the model (E4B) is downloaded and loaded; skips the scenario otherwise.
+  func requireLoadedModel() async throws {
+    _ = try await harness.ensureDownloaded(ModelCatalog.e4b, timeout: 5400)
     let loaded = await appState.ensureEngineLoaded()
     guard loaded else {
-      XCTFail("E2B failed to load: \(appState.engineState)")
+      XCTFail("E4B failed to load: \(appState.engineState)")
       throw XCTSkip("Engine not loaded")
     }
   }

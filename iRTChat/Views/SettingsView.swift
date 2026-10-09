@@ -45,7 +45,7 @@ struct SettingsView: View {
   private var statusSection: some View {
     Section {
       HStack(spacing: DS.spaceMD) {
-        Image(systemName: activeSpec.requiresRoomyDevice ? "cpu.fill" : "bolt.fill")
+        Image(systemName: "sparkles")
           .font(.callout)
           .frame(width: DS.iconLG, height: DS.iconLG)
           .glassEffect(.regular.tint(.accentColor), in: .circle)
@@ -66,7 +66,7 @@ struct SettingsView: View {
     }
   }
 
-  private var activeSpec: ModelSpec { ModelCatalog.spec(for: appState.store.activeModelID) }
+  private var activeSpec: ModelSpec { appState.store.activeSpec }
 
   private var statusLine: String {
     switch appState.engineState {
@@ -97,18 +97,14 @@ struct SettingsView: View {
 
   private var modelSection: some View {
     Section {
-      Picker("Active model", selection: modelBinding) {
-        ForEach(ModelCatalog.all) { spec in
-          Text(spec.displayName).tag(spec.id)
-        }
-      }
+      LabeledContent("Model", value: activeSpec.displayName)
     } header: {
       Label("Model", systemImage: "cube")
     } footer: {
       if let resolved = appState.resolved {
         Text(resolvedSummary(resolved)).monospacedDigit()
       } else {
-        Text("Only downloaded models can be activated. E4B needs a roomy device.")
+        Text("Download the model in the Models tab to start chatting.")
       }
     }
   }
@@ -243,7 +239,7 @@ struct SettingsView: View {
       Label("Benchmark", systemImage: "speedometer")
     } footer: {
       Text(
-        "1024 prefill / 256 decode tokens. Google reports 2878 prefill / 56 decode tok/s for E2B on iPhone 17 Pro GPU."
+        "1024 prefill / 256 decode tokens. Google reports 1189 prefill / 25 decode tok/s for E4B on iPhone 17 Pro GPU (without speculative decoding)."
       )
     }
   }
@@ -315,15 +311,6 @@ struct SettingsView: View {
 
   // MARK: - Bindings
 
-  private var modelBinding: Binding<ModelID> {
-    Binding(
-      get: { appState.store.activeModelID },
-      set: { id in
-        guard appState.store.isDownloaded(ModelCatalog.spec(for: id)) else { return }
-        Task { await appState.switchModel(to: id) }
-      }
-    )
-  }
 
   private var autoContextBinding: Binding<Bool> {
     Binding(

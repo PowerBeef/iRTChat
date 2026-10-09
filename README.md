@@ -53,7 +53,7 @@ No accounts. No API keys. No cloud. After a one-time model download, every conve
 | --- | --- |
 | **Development** | Mac with Xcode 27 and the iOS 27 SDK |
 | **Inference** | A physical iPhone on iOS 27 — the simulator has no Metal LLM path and runs a scripted mock engine instead |
-| **Storage** | ~3 GB free for E2B, ~4 GB for E4B |
+| **Storage** | ~4.2 GB free (3.7 GB model + headroom) |
 | **Signing** | An Apple Developer account with the **Extended Virtual Addressing** and **Increased Memory Limit** capabilities |
 | **Network** | Only to download a model |
 
@@ -64,7 +64,7 @@ No accounts. No API keys. No cloud. After a one-time model download, every conve
 1. Open `iRTChat.xcodeproj`.
 2. The project is configured for team `FK2D8X36G2` and bundle ID `com.patricedery.irtchat`. On another account, change both under **Signing & Capabilities**.
 3. Select the `iRTChat` scheme and your iPhone, then run. Use the **Release** configuration for representative speed.
-4. Open the **Models** tab and download **Gemma 4 E2B**. Keep the app in the foreground until the download finishes.
+4. Open the **Models** tab and download **Gemma 4 E4B** (3.7 GB). Keep the app in the foreground until the download finishes.
 5. Start a chat from the **Chat** tab.
 
 > [!NOTE]
@@ -76,12 +76,15 @@ Run the `iRTChat` scheme on any iPhone simulator with the `--mock-engine` launch
 
 ## Models
 
-| Model | Size | Use | Requires | License |
-| --- | --- | --- | --- | --- |
-| **Gemma 4 E2B** | 2.6 GB | Default. Text, vision, audio, reasoning. | Any supported iPhone | Apache 2.0 |
-| **Gemma 4 E4B** | 3.7 GB | Higher quality. | App memory limit of at least 4.5 GB | Apache 2.0 |
+iRTChat runs a single model, **Gemma 4 E4B** — text, vision, audio, reasoning and tool calling.
 
-Models are the multimodal `.litertlm` builds from Hugging Face ([`litert-community`](https://huggingface.co/litert-community)), downloaded at runtime without an account; they are not included in this repository. Downloads support pause and resume, are size- and HTTP-status-verified, check free space first, and are stored in Application Support, excluded from iCloud backup.
+| Model | Size | Context | License |
+| --- | --- | --- | --- |
+| **Gemma 4 E4B** | 3.7 GB | 8K for chat; up to 16K–32K for long inputs, depending on the device's memory | Apache 2.0 |
+
+E4B was validated for the iPhone 15 Pro floor with an 8 GB memory simulation (incompressible ballast shrinking usable memory to 5.0, 4.0 and 3.5 GB): text, image, audio and 16K inputs all completed without the app being terminated. Speed on A17 Pro hardware is not yet measured. Chats created with Gemma 4 E2B in earlier versions continue on E4B, and the old E2B file is deleted automatically.
+
+The model is the multimodal `.litertlm` build from Hugging Face ([`litert-community`](https://huggingface.co/litert-community)), downloaded at runtime without an account; it is not included in this repository. Downloads support pause and resume, are size- and HTTP-status-verified, check free space first, and are stored in Application Support, excluded from iCloud backup.
 
 ### Settings
 
@@ -131,30 +134,30 @@ These safeguards come from failures reproduced on device by the test harness.
 - **Stop and resume** — A cancelled LiteRT-LM conversation rejects the next message. Stopped replies keep their partial text, and the chat's conversation is rebuilt from history before the next send.
 - **Background** — iOS doesn't allow GPU work in the background. A reply in progress stops cleanly when the app leaves the foreground.
 - **Memory** — The memory entitlements raise the app's limit from about 3.5 GB to about 6.4 GB on a 12 GB iPhone and prevent address-space exhaustion when engines are rebuilt.
-- **Capability flags** — The model file's *thinking* and *function-calling* flags are not trusted; Gemma 4 E2B reports both as unsupported, yet reasons and calls tools on device.
+- **Capability flags** — The model file's *thinking* and *function-calling* flags are not trusted; Gemma 4 files report both as unsupported, yet the model reasons and calls tools on device.
+- **Structured helpers** — Titles and other helper outputs use JSON-schema constrained decoding with speculative decoding off (MTP breaks the grammar mask on device), in a throwaway conversation; the chat is then rebuilt from history, since LiteRT-LM keeps one live conversation per engine.
 
 ## Performance
 
-Measured on iPhone 17 Pro (12 GB, iOS 27) with Gemma 4 on the GPU and MTP enabled.
+Gemma 4 E4B measured on iPhone 17 Pro (12 GB, iOS 27), GPU, MTP enabled.
 
-| Metric | Gemma 4 E2B | Gemma 4 E4B |
-| --- | --- | --- |
-| Load (warm, kernels cached) | 0.6 – 2 s | — |
-| Load (first, after download) | ~7 s | ~9 s |
-| Time to first token | 0.1 – 0.3 s | ~0.4 s |
-| Decode, in chat | 40 – 80 tok/s | ~50 tok/s |
-| Benchmark prefill (1,024 tokens) | 3,900 – 5,000 tok/s | — |
-| Benchmark decode (256 tokens) | 25 – 62 tok/s, depending on device temperature | — |
-| App memory footprint | 0.6 – 2.3 GB | ~1.1 GB after load |
+| Metric | Gemma 4 E4B |
+| --- | --- |
+| Load (first, after download / warm) | ~9 s / ~1–3 s |
+| Time to first token, short message | ~0.4 s |
+| Time to first token, 2.3K / 4.4K / 8.6K-token input | 2.1 s / 6.0 s / 18.9 s |
+| Decode, chat at 4K / 8K / 16K / 32K context | 43 / 38 / 34 / 27 tok/s |
+| Decode, long reasoning answers (1,000+ tokens) | ~22 tok/s |
+| App memory footprint (8K context, with vision/audio) | ~1.4 – 2.5 GB |
 
-For reference, Google reports 2,878 prefill and 56 decode tokens per second for E2B on the iPhone 17 Pro GPU.
+A larger KV cache slows every reply, so chat uses 8K and only long inputs get more. For reference, Google reports 1,189 prefill and 25 decode tokens per second for E4B on the iPhone 17 Pro GPU without speculative decoding.
 
 ## Testing
 
 | Target | Runs on | Covers |
 | --- | --- | --- |
 | `iRTChatTests` | Simulator | Planner, context budgeting, device policy, calculator, catalog, downloads, and the app pipeline through the mock engine |
-| `iRTChatDeviceTests` | iPhone | The real engine in-process: download, load, text, chat isolation, stop and continue, tools, thinking, image, audio, settings rebuilds, context limits, benchmark. E4B scenarios are opt-in. |
+| `iRTChatDeviceTests` | iPhone | The real engine in-process: download, load, text, chat isolation, stop and continue, tools, thinking, image, audio, settings rebuilds, context limits, titles, benchmark. Opt-in suites: long Thinking, 8 GB memory simulation, context calibration, LiteRT-LM probes. |
 | `iRTChatUITests` | iPhone or simulator | Real taps: new chat, send, Stop, Home button mid-reply, leaving and returning mid-reply, rapid settings changes, Models tab |
 
 **Unit tests (simulator)**
@@ -165,7 +168,7 @@ xcodebuild test -project iRTChat.xcodeproj -scheme iRTChat \
   -only-testing:iRTChatTests
 ```
 
-**On-device harness** (connected, unlocked iPhone; downloads E2B if missing)
+**On-device harness** (connected, unlocked iPhone; downloads E4B if missing)
 
 The harness targets the `deviceId` in `.mobilebuildmcp/config.yaml`, a local, git-ignored file. Create it once from the template and set your iPhone's UDID (`xcrun devicectl list devices`), or pass `DEVICE_ID=<udid>` per run:
 
@@ -176,8 +179,11 @@ cp .mobilebuildmcp/config.example.yaml .mobilebuildmcp/config.yaml
 ```sh
 scripts/device-harness.sh inference   # engine scenarios
 scripts/device-harness.sh ui          # real-tap UI flows
-scripts/device-harness.sh e4b         # opt-in E4B scenarios (3.7 GB download)
 scripts/device-harness.sh all         # inference, then UI
+scripts/device-harness.sh thinking    # long Thinking-mode scenarios
+scripts/device-harness.sh memory      # 8 GB iPhone memory simulation
+scripts/device-harness.sh calibrate   # speed and memory at 4K–32K context
+scripts/device-harness.sh probes      # LiteRT-LM feature probes
 
 DEVICE_ID=<udid> scripts/device-harness.sh all   # a specific iPhone
 ```
@@ -247,11 +253,11 @@ iRTChat is licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE
 | --- | --- | --- |
 | iRTChat source code | This repository | Apache 2.0 |
 | LiteRT-LM | Vendored in `Vendor/LiteRT-LM` | Apache 2.0 |
-| Gemma 4 E2B / E4B | Downloaded at runtime | Apache 2.0 |
+| Gemma 4 E4B | Downloaded at runtime | Apache 2.0 |
 
 ## Acknowledgements
 
 - [LiteRT](https://github.com/google-ai-edge/litert) and [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) by Google (Apache 2.0)
 - [LiteRT-LM Swift guide](https://developers.google.com/edge/litert-lm/swift)
 - [Gemma 4 on LiteRT-LM](https://developers.google.com/edge/litert-lm/models/gemma-4)
-- [Gemma 4](https://huggingface.co/google/gemma-4-E2B-it) by Google, with [E2B](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) and [E4B](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) LiteRT-LM builds by `litert-community` (Apache 2.0)
+- [Gemma 4 E4B](https://huggingface.co/google/gemma-4-E4B-it) by Google, with the [LiteRT-LM build](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) by `litert-community` (Apache 2.0)

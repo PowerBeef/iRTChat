@@ -4,7 +4,7 @@ import XCTest
 
 @testable import iRTChat
 
-/// End-to-end on-device scenarios for Gemma 4 E2B, run through the real app
+/// End-to-end on-device scenarios for Gemma 4 E4B, run through the real app
 /// pipeline (AppState → LiteRTChatEngine → LiteRT-LM). Tests run in name
 /// order; the model loads once and is shared.
 ///
@@ -12,14 +12,13 @@ import XCTest
 final class InferenceScenarioTests: DeviceTestCase {
 
   func test00_ModelAvailable() async throws {
-    let downloadSeconds = try await harness.ensureDownloaded(ModelCatalog.e2b)
-    XCTAssertTrue(appState.store.isDownloaded(ModelCatalog.e2b))
+    let downloadSeconds = try await harness.ensureDownloaded(ModelCatalog.e4b, timeout: 5400)
+    XCTAssertTrue(appState.store.isDownloaded(ModelCatalog.e4b))
     harness.record("00_model", ["downloadSeconds": downloadSeconds], in: self)
   }
 
-  func test01_LoadE2B() async throws {
-    _ = try await harness.ensureDownloaded(ModelCatalog.e2b)
-    await appState.switchModel(to: .e2b)
+  func test01_LoadModel() async throws {
+    _ = try await harness.ensureDownloaded(ModelCatalog.e4b, timeout: 5400)
     // Measure a cold load: drop whatever an earlier scenario left loaded.
     await appState.engine.unload()
     let before = MemoryProbe.footprintBytes()
@@ -39,7 +38,7 @@ final class InferenceScenarioTests: DeviceTestCase {
   }
 
   func test02_TextReply() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     let thread = harness.newThread()
     let exchange = await harness.ask(
       "What is the capital of France? Answer in one short sentence.", in: thread)
@@ -55,7 +54,7 @@ final class InferenceScenarioTests: DeviceTestCase {
 
   /// Regression for audit #2: context must not bleed between chats.
   func test03_ThreadIsolation() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     let a = harness.newThread()
     let b = harness.newThread()
     let seed = await harness.ask(
@@ -77,7 +76,7 @@ final class InferenceScenarioTests: DeviceTestCase {
 
   /// Audit #10: Stop must end as a cancellation, not an error.
   func test04_StopMidReply() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     let thread = harness.newThread()
     let state = appState
     let sending = Task { @MainActor in
@@ -91,8 +90,11 @@ final class InferenceScenarioTests: DeviceTestCase {
     let partialLength = thread.orderedTurns.last(where: { !$0.isUser })?.text.count ?? 0
     let stopAt = Date()
     appState.stop()
-    _ = await sending.value
+    // User-facing latency: until the reply stops and the composer is usable
+    // (send() itself returns later, after the post-reply title helper).
+    try await harness.waitUntil("reply to stop", timeout: 10) { !state.isGenerating }
     let stopLatency = Date().timeIntervalSince(stopAt)
+    _ = await sending.value
     let reply = thread.orderedTurns.last(where: { !$0.isUser })
     harness.record(
       "04_stop",
@@ -116,7 +118,7 @@ final class InferenceScenarioTests: DeviceTestCase {
   }
 
   func test05_ToolCall() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     let thread = harness.newThread()
     let cursor = ToolActivity.cursor
     let exchange = await harness.ask(
@@ -141,7 +143,7 @@ final class InferenceScenarioTests: DeviceTestCase {
   }
 
   func test06_Thinking() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     appState.options.enableThinking = true
     appState.options.thinkingBudget = 512
     await appState.applyCurrentOptions()
@@ -163,8 +165,8 @@ final class InferenceScenarioTests: DeviceTestCase {
   /// Ask LiteRT-LM directly (bypassing the app's capability gate) whether
   /// this file can stream reasoning.
   func test06b_ThinkingProbeBypassingCapabilityGate() async throws {
-    try await requireLoadedE2B()
-    guard let url = appState.store.localURL(for: ModelCatalog.e2b) else {
+    try await requireLoadedModel()
+    guard let url = appState.store.localURL(for: ModelCatalog.e4b) else {
       throw XCTSkip("No model file")
     }
     // Free the app's engine first: two GPU engines won't fit the memory limit.
@@ -199,7 +201,7 @@ final class InferenceScenarioTests: DeviceTestCase {
   }
 
   func test07_ImageInput() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     guard appState.resolved?.enableVision == true else {
       throw XCTSkip("Session is text-only: \(harness.resolvedSummary())")
     }
@@ -215,7 +217,7 @@ final class InferenceScenarioTests: DeviceTestCase {
   }
 
   func test08_AudioInput() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     guard appState.resolved?.enableAudio == true else {
       throw XCTSkip("Session has no audio: \(harness.resolvedSummary())")
     }
@@ -233,7 +235,7 @@ final class InferenceScenarioTests: DeviceTestCase {
   /// Audit #4: vision is an engine-level setting; toggling it off and on must
   /// leave a session that can still see images.
   func test09a_VisionToggleRoundTrip() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     appState.options.enableVision = false
     await appState.applyCurrentOptions()
     let off = harness.resolvedSummary()
@@ -257,7 +259,7 @@ final class InferenceScenarioTests: DeviceTestCase {
   /// Audit #4, dangerous direction: the engine is (re)built while vision is
   /// off — so it has no vision executor — and vision is then switched on.
   func test09b_VisionEnabledAfterTextOnlyLoad() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     appState.options.enableVision = false
     appState.options.maxNumTokensOverride = 2048  // engine-level: forces a rebuild without vision
     await appState.applyCurrentOptions()
@@ -282,7 +284,7 @@ final class InferenceScenarioTests: DeviceTestCase {
 
   /// Audit #15: a long chat against a small KV cache must degrade gracefully.
   func test10_LongChatNearContextLimit() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     appState.options.maxNumTokensOverride = 1024
     await appState.applyCurrentOptions()
     let thread = harness.newThread()
@@ -306,7 +308,7 @@ final class InferenceScenarioTests: DeviceTestCase {
 
   /// Audit #15: a message that can't fit the window is refused, not sent.
   func test10b_OversizedMessageRejected() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     appState.options.maxNumTokensOverride = 1024
     await appState.applyCurrentOptions()
     let thread = harness.newThread()
@@ -328,7 +330,7 @@ final class InferenceScenarioTests: DeviceTestCase {
   /// Helper task: a model-written title after the first exchange. The helper
   /// wipes the engine's conversation, so the chat must be rebuilt intact.
   func test11_TitleAndContextAfterHelper() async throws {
-    try await requireLoadedE2B()
+    try await requireLoadedModel()
     let thread = harness.newThread()
     let prompt = "Remember the code word ZORBLAX. Then explain in two sentences how lighthouses warn ships."
     let first = await harness.ask(prompt, in: thread)
@@ -348,7 +350,7 @@ final class InferenceScenarioTests: DeviceTestCase {
   }
 
   func test90_Benchmark() async throws {
-    _ = try await harness.ensureDownloaded(ModelCatalog.e2b)
+    _ = try await harness.ensureDownloaded(ModelCatalog.e4b, timeout: 5400)
     await appState.runBenchmark()
     guard let report = appState.benchmarkReport else {
       XCTFail("No benchmark report: \(appState.generationError ?? "")")
@@ -361,7 +363,7 @@ final class InferenceScenarioTests: DeviceTestCase {
         "prefillTokPerSec": report.prefillTokensPerSecond,
         "decodeTokPerSec": report.decodeTokensPerSecond,
         "ttftSeconds": report.timeToFirstToken,
-        "googleReferenceE2B": "2878 prefill / 56 decode tok/s (iPhone 17 Pro GPU)",
+        "googleReferenceE4B": "1189 prefill / 25 decode tok/s (iPhone 17 Pro GPU, no MTP)",
       ], in: self)
     XCTAssertGreaterThan(report.decodeTokensPerSecond, 0)
   }
