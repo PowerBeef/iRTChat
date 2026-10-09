@@ -132,6 +132,9 @@ final class InferenceScenarioTests: DeviceTestCase {
       ], in: self)
     XCTAssertTrue(digits.contains("7006652"), "Wrong/missing result: \(exchange.text)")
     XCTAssertTrue(invoked.contains(CalculatorTool.name), "The model never ran the calculate tool")
+    XCTAssertEqual(
+      exchange.reply?.parts.toolActivity.first?.name, CalculatorTool.name,
+      "Tool activity not saved on the reply")
     XCTAssertFalse(
       exchange.reply?.toolNames.isEmpty ?? true,
       "Tool chip not recorded (toolNames empty) even though tools are enabled")
@@ -320,6 +323,28 @@ final class InferenceScenarioTests: DeviceTestCase {
     XCTAssertFalse(rejected.accepted, "Oversized message was sent to the engine")
     XCTAssertEqual(errorShown, ChatError.messageTooLong.displayMessage)
     XCTAssertTrue(thread.turns.contains { $0.text == after.text } && !after.text.isEmpty)
+  }
+
+  /// Helper task: a model-written title after the first exchange. The helper
+  /// wipes the engine's conversation, so the chat must be rebuilt intact.
+  func test11_TitleAndContextAfterHelper() async throws {
+    try await requireLoadedE2B()
+    let thread = harness.newThread()
+    let prompt = "Remember the code word ZORBLAX. Then explain in two sentences how lighthouses warn ships."
+    let first = await harness.ask(prompt, in: thread)
+    let provisional = AppState.title(prompt: prompt, hasImage: false)
+    let recall = await harness.ask("What code word did I ask you to remember?", in: thread)
+    harness.record(
+      "11_title",
+      [
+        "title": thread.title, "provisional": provisional, "firstReply": String(first.text.prefix(120)),
+        "recall": recall.text,
+      ], in: self)
+    XCTAssertNotEqual(thread.title, provisional, "Title was not generated")
+    XCTAssertLessThanOrEqual(thread.title.count, HelperTasks.maxTitleLength)
+    XCTAssertTrue(
+      recall.text.localizedCaseInsensitiveContains("ZORBLAX"),
+      "Context lost after the title helper: \(recall.text)")
   }
 
   func test90_Benchmark() async throws {

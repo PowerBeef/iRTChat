@@ -37,6 +37,11 @@ protocol ChatEngineProtocol: Sendable {
     text: String, imageData: Data?, audioFileURL: URL?
   ) -> AsyncThrowingStream<ChatEvent, Error>
   func cancel() async
+  /// Run a structured helper prompt (JSON-schema constrained) in a throwaway
+  /// conversation. This wipes the main conversation's context (LiteRT-LM keeps
+  /// one live conversation per engine), which is replaced by an empty one:
+  /// the caller must re-seed history before the next send.
+  func helperJSON(prompt: String, schemaJSON: String, maxOutputTokens: Int) async throws -> Data
 }
 
 // MARK: - Live engine
@@ -393,6 +398,37 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     return updated
   }
 
+  // MARK: Helpers
+
+  func helperJSON(prompt: String, schemaJSON: String, maxOutputTokens: Int) async throws -> Data {
+    guard let engine, let resolved, let options else { throw ChatError.engineNotReady }
+    guard !generating else { throw ChatError.underlying(message: "Busy generating.") }
+    generating = true
+    defer { generating = false }
+    let started = Date()
+    let output: String
+    do {
+      // Speculative decoding (MTP) breaks grammar-constrained decoding on
+      // device (drafted tokens bypass the JSON mask: garbled output or
+      // "compute_mask() called after stop"), so helpers decode plainly.
+      let helper = try await engine.createConversation(
+        with: ConversationConfig(enableResponseFormat: true, enableSpeculativeDecoding: false))
+      let reply = try await helper.sendMessage(
+        LiteRTLM.Message(prompt), maxOutputTokens: maxOutputTokens,
+        responseFormat: try .json(schema: schemaJSON))
+      output = reply.toString
+    }
+    // The helper wiped the main conversation: replace it with an empty one.
+    conversation = nil
+    conversation = try await Self.makeConversation(
+      engine: engine, resolved: resolved, options: options, toolsEnabled: toolsEnabled,
+      history: [])
+    pendingSeedTokens = ContextBudget.preambleTokens
+    Log.engine.info(
+      "helper: \(output.utf8.count) bytes in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s")
+    return Data(output.utf8)
+  }
+
   // MARK: Send
 
   nonisolated func send(
@@ -439,15 +475,16 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     let message = LiteRTLM.Message(contents: contents)
 
     // Hard guarantee against KV-cache overflow (which corrupts the native
-    // heap): cap the reply to the room actually left. An automatic tool round
-    // adds a tool response and a second reply under the same cap, so split
-    // the room when tools are on.
+    // heap): everything this turn adds must fit the room left. Tool rounds run
+    // inside LiteRT-LM (each = a tool result + another generation under the
+    // same cap), so with tools the room is split: a quarter per generation,
+    // an eighth per tool result, at most two tool calls (3/4 + 2/8 = 1).
     let measuredBefore = (try? conversation.getTokenCount()) ?? 0
     let usedBefore = usedTokens()
     let inputEstimate = estimateInput(
       text: text, imageData: imageData, audioFileURL: audioFileURL)
     guard
-      var cap = ContextBudget.outputCap(
+      let room = ContextBudget.outputCap(
         maxNumTokens: resolved.maxNumTokens, used: usedBefore, input: inputEstimate)
     else {
       Log.generation.error(
@@ -455,19 +492,28 @@ actor LiteRTChatEngine: ChatEngineProtocol {
       continuation.finish(throwing: ChatError.contextFull)
       return
     }
-    if toolsEnabled { cap /= 2 }
+    let cap = toolsEnabled ? room / 4 : room
     let maxOutputTokens = min(resolved.maxOutputTokens ?? cap, cap)
+    ToolBudget.begin(
+      ToolBudget.Limits(
+        maxResultBytes: Int(Double(room / 8) * ContextBudget.bytesPerToken),
+        maxCalls: toolsEnabled ? 2 : 0))
+    defer { ToolBudget.end() }
+    // Safety net for what the budgets can't bound (e.g. extra tool rounds):
+    // stop before streamed output + tool results could exceed the room.
+    let roomBytes = Int(Double(room) * ContextBudget.bytesPerToken)
+    var emittedBytes = 0
 
     let started = Date()
     var firstChunkAt: Date?
     // Tool calls run inside LiteRT-LM and never appear in streamed chunks;
-    // report the tools that actually ran so the reply can show its chips.
+    // report the tools that actually ran (status line, chips, parts).
     let toolCursor = ToolActivity.cursor
     var reportedTools = 0
-    func newToolNames() -> [String] {
-      let invoked = ToolActivity.invocations(since: toolCursor)
-      defer { reportedTools = invoked.count }
-      return Array(invoked.dropFirst(reportedTools))
+    func newToolActivity() -> [ToolActivityRecord] {
+      let records = ToolActivity.records(since: toolCursor)
+      defer { reportedTools = records.count }
+      return Array(records.dropFirst(reportedTools))
     }
 
     func stats(started: Date, firstChunkAt: Date?) -> GenerationStats {
@@ -505,17 +551,32 @@ actor LiteRTChatEngine: ChatEngineProtocol {
           return
         }
         if firstChunkAt == nil { firstChunkAt = Date() }
+        let thought = chunk.channels["thought"]
+        emittedBytes += chunk.toString.utf8.count + (thought?.utf8.count ?? 0)
+        let activity = newToolActivity()
         continuation.yield(
           .chunk(
             ChatChunk(
               textDelta: chunk.toString,
-              thoughtDelta: chunk.channels["thought"],
-              toolNames: chunk.toolCalls.map(\.name) + newToolNames()
+              thoughtDelta: thought,
+              toolNames: chunk.toolCalls.map(\.name) + activity.map(\.name),
+              toolActivity: activity
             )))
+        if emittedBytes + ToolBudget.resultBytes > roomBytes {
+          Log.generation.error(
+            "context guard: stopping at \(emittedBytes)+\(ToolBudget.resultBytes) bytes of \(roomBytes)")
+          try? conversation.cancel()
+          continuation.finish(throwing: ChatError.replyTruncated)
+          return
+        }
       }
-      let lateTools = newToolNames()
-      if !lateTools.isEmpty {
-        continuation.yield(.chunk(ChatChunk(textDelta: "", thoughtDelta: nil, toolNames: lateTools)))
+      let lateActivity = newToolActivity()
+      if !lateActivity.isEmpty {
+        continuation.yield(
+          .chunk(
+            ChatChunk(
+              textDelta: "", thoughtDelta: nil, toolNames: lateActivity.map(\.name),
+              toolActivity: lateActivity)))
       }
       if cancelRequested {
         Log.generation.info("cancelled (user)")
@@ -659,5 +720,15 @@ actor MockChatEngine: ChatEngineProtocol {
 
   func cancel() async {
     if generating { cancelRequested = true }
+  }
+
+  /// Scripted helper output (tests) and a log of prompts.
+  private(set) var helperResponse = Data(#"{"title":"Mock chat"}"#.utf8)
+  private(set) var helperPrompts: [String] = []
+  func setHelperResponse(_ json: String) { helperResponse = Data(json.utf8) }
+
+  func helperJSON(prompt: String, schemaJSON: String, maxOutputTokens: Int) async throws -> Data {
+    helperPrompts.append(prompt)
+    return helperResponse
   }
 }

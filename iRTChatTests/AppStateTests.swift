@@ -62,6 +62,9 @@ final class AppStateTests: XCTestCase {
   func testSwitchingThreadsReplaysTheOpenThreadsHistory() async {
     let a = appState.newThread(in: context)
     await appState.send(text: "Hi", imageData: nil, audioFileURL: nil, in: a)
+    // A second message, so the engine holds A's context (the first exchange's
+    // title helper leaves it empty).
+    await appState.send(text: "Again", imageData: nil, audioFileURL: nil, in: a)
     let b = appState.newThread(in: context)
 
     // Opening B must not continue A's native conversation.
@@ -72,18 +75,57 @@ final class AppStateTests: XCTestCase {
     // Re-opening A restores A's context.
     await appState.activate(a)
     log = await mock.reseedLog
-    XCTAssertEqual(log.last, ["Hi", "Hello from the mock engine!"])
+    XCTAssertEqual(
+      log.last, ["Hi", "Hello from the mock engine!", "Again", "Hello from the mock engine!"])
     XCTAssertEqual(appState.selectedThreadID, a.id)
   }
 
   func testReopeningSameThreadDoesNotReseed() async {
     let thread = appState.newThread(in: context)
     await appState.send(text: "Hi", imageData: nil, audioFileURL: nil, in: thread)
+    // The title helper replaced the engine's conversation: one rebuild...
+    await appState.activate(thread)
     let before = await mock.reseedLog.count
+    // ...then reopening the same chat doesn't replay it again.
     await appState.activate(thread)
     await appState.activate(thread)
     let after = await mock.reseedLog.count
     XCTAssertEqual(before, after)
+  }
+
+  // MARK: - Titles (helper task)
+
+  func testFirstExchangeGetsAModelWrittenTitleAndContextIsRebuilt() async {
+    let thread = appState.newThread(in: context)
+    await appState.send(text: "Tell me about lighthouses", imageData: nil, audioFileURL: nil, in: thread)
+    XCTAssertEqual(thread.title, "Mock chat")
+    let prompts = await mock.helperPrompts
+    XCTAssertEqual(prompts.count, 1)
+    XCTAssertTrue(prompts.first?.contains("Tell me about lighthouses") ?? false)
+
+    // The helper wiped the engine's conversation, so the next message replays history.
+    let reseedsBefore = await mock.reseedLog.count
+    await appState.send(text: "More", imageData: nil, audioFileURL: nil, in: thread)
+    let log = await mock.reseedLog
+    XCTAssertEqual(log.count, reseedsBefore + 1)
+    XCTAssertEqual(log.last?.first, "Tell me about lighthouses")
+    // Only the first exchange is titled.
+    let promptsAfter = await mock.helperPrompts
+    XCTAssertEqual(promptsAfter.count, 1)
+  }
+
+  func testUserRenamedChatKeepsItsTitle() async {
+    let thread = appState.newThread(in: context)
+    thread.title = "My trip"
+    await appState.send(text: "Plan a day in Kyoto", imageData: nil, audioFileURL: nil, in: thread)
+    XCTAssertEqual(thread.title, "My trip")
+  }
+
+  func testUnusableHelperOutputKeepsProvisionalTitle() async {
+    await mock.setHelperResponse(#"{"title":"   "}"#)
+    let thread = appState.newThread(in: context)
+    await appState.send(text: "Hi there", imageData: nil, audioFileURL: nil, in: thread)
+    XCTAssertEqual(thread.title, "Hi there")
   }
 
   func testSendRejectedForOtherModelsThreadPersistsNothing() async {
@@ -170,8 +212,11 @@ final class AppStateTests: XCTestCase {
     let voice = FileManager.default.temporaryDirectory.appendingPathComponent("voice.wav")
     let accepted = await appState.send(text: "", imageData: nil, audioFileURL: voice, in: thread)
     XCTAssertTrue(accepted)
-    XCTAssertEqual(thread.title, "Voice message")
     XCTAssertEqual(thread.orderedTurns.first?.hasAudio, true)
+    // "Voice message" is the provisional title the model is asked to improve.
+    let prompts = await mock.helperPrompts
+    XCTAssertTrue(prompts.first?.contains("User: Voice message") ?? false)
+    XCTAssertEqual(thread.title, "Mock chat")
   }
 
   func testTitles() {

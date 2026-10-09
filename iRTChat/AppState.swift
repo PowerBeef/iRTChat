@@ -45,6 +45,9 @@ final class AppState {
   /// The chat whose reply is streaming (only it shows the live cursor and
   /// can't be deleted mid-reply).
   var generatingThreadID: UUID?
+  /// What a running tool is doing ("Searched the web for …"), shown in the
+  /// live reply; nil when no tool has run in the current reply.
+  var toolStatus: String?
   var generationError: String?
   var isBenchmarking = false
   var benchmarkReport: BenchmarkReport? {
@@ -405,7 +408,47 @@ final class AppState {
       pendingOptionsApply = false
       await applyCurrentOptions()
     }
+    await generateTitleIfNeeded(for: thread)
     return true
+  }
+
+  /// After the first exchange, replace the provisional title (the first
+  /// words of the first message) with a short model-written one.
+  func generateTitleIfNeeded(for thread: ChatThread) async {
+    let path = thread.orderedTurns
+    guard path.count == 2, let first = path.first, first.isUser,
+      let reply = path.last, !reply.isUser, !reply.text.isEmpty,
+      !reply.text.hasPrefix(ChatTurn.errorPrefix)
+    else { return }
+    let provisional = Self.title(prompt: first.text, hasImage: first.imageData != nil)
+    guard thread.title == provisional else { return }  // renamed by the user
+    let prompt = HelperTasks.titlePrompt(
+      user: first.text.isEmpty ? provisional : first.text, reply: reply.text)
+    let output: Data? = await serialized {
+      guard !self.isGenerating, await self.engine.isLoaded else { return nil }
+      let data: Data?
+      do {
+        data = try await self.engine.helperJSON(
+          prompt: prompt, schemaJSON: HelperTasks.titleSchema,
+          maxOutputTokens: HelperTasks.titleMaxOutputTokens)
+      } catch {
+        Log.engine.error("title helper failed: \(String(describing: error), privacy: .public)")
+        data = nil
+      }
+      // The helper replaced the engine's conversation with an empty one:
+      // rebuild this chat from history on its next message.
+      self.conversationThreadID = nil
+      self.conversationIsEmpty = true
+      return data
+    }
+    guard let output, let title = HelperTasks.parseTitle(output), thread.title == provisional
+    else {
+      Log.engine.error(
+        "title helper unusable: \(output.map { String(decoding: $0, as: UTF8.self) } ?? "nil", privacy: .public)")
+      return
+    }
+    thread.title = title
+    try? modelContext?.save()
   }
 
   /// Chat title from the first message; attachment-only messages get a label.
@@ -426,13 +469,21 @@ final class AppState {
       reply.text = accumulator.text
       reply.thought = accumulator.thought
       if reply.toolNames != accumulator.toolNames { reply.toolNames = accumulator.toolNames }
+      if reply.parts.toolActivity != accumulator.toolActivity {
+        var parts = reply.parts
+        parts.toolActivity = accumulator.toolActivity
+        reply.parts = parts
+      }
       lastFlush = .now
     }
+    toolStatus = nil
+    defer { toolStatus = nil }
     do {
       for try await event in stream {
         switch event {
         case .chunk(let chunk):
           accumulator.append(chunk)
+          if let latest = chunk.toolActivity.last { toolStatus = latest.summary }
           if ContinuousClock.now - lastFlush >= .milliseconds(100) { flush() }
         case .finished(let stats):
           reply.stats = stats
@@ -443,7 +494,9 @@ final class AppState {
       Haptics.complete()
     } catch let error as ChatError {
       flush()
-      if case .generationCancelled = error {
+      switch error {
+      case .generationCancelled, .replyTruncated:
+        if case .replyTruncated = error { generationError = error.displayMessage }
         if reply.text.isEmpty {
           reply.thread?.removeLeaf(reply)
           context.delete(reply)
@@ -452,7 +505,7 @@ final class AppState {
         // LiteRT-LM leaves a cancelled conversation unusable: rebuild it from
         // the thread's history (incl. the partial reply) before the next send.
         conversationThreadID = nil
-      } else {
+      default:
         reply.text = reply.text.isEmpty ? ChatTurn.errorPrefix + error.displayMessage : reply.text
         try? context.save()
         Haptics.error()

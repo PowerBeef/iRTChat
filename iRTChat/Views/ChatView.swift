@@ -156,7 +156,9 @@ struct ChatView: View {
           ScrollView {
             LazyVStack(spacing: DS.spaceLG) {
               ForEach(turns) { turn in
-                MessageBubbleView(turn: turn, isStreaming: isLiveBubble(turn, in: turns))
+                MessageBubbleView(
+                  turn: turn, isStreaming: isLiveBubble(turn, in: turns),
+                  toolStatus: appState.toolStatus)
                   .id(turn.id)
               }
               Color.clear.frame(height: 1).id("bottom")

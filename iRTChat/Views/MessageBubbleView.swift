@@ -5,6 +5,8 @@ import SwiftUI
 struct MessageBubbleView: View {
   let turn: ChatTurn
   var isStreaming: Bool = false
+  /// What a tool is doing right now (live reply only).
+  var toolStatus: String? = nil
 
   var body: some View {
     if turn.isUser {
@@ -56,6 +58,17 @@ struct MessageBubbleView: View {
         .frame(width: DS.iconSM, height: DS.iconSM)
         .glassEffect(.regular, in: .circle)
       VStack(alignment: .leading, spacing: 8) {
+        if isStreaming, let toolStatus {
+          HStack(spacing: 6) {
+            ProgressView().controlSize(.mini)
+            Text(toolStatus)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+          }
+          .accessibilityElement(children: .combine)
+          .accessibilityIdentifier("message.toolStatus")
+        }
         if !turn.text.isEmpty {
           HStack(alignment: .lastTextBaseline, spacing: 3) {
             renderedText(turn.text)

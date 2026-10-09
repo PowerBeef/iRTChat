@@ -110,6 +110,8 @@ struct ChatChunk: Sendable, Equatable {
   var thoughtDelta: String?
   /// Tool names invoked to produce this chunk (usually empty).
   var toolNames: [String] = []
+  /// Tool runs (with user-facing summaries) completed since the last chunk.
+  var toolActivity: [ToolActivityRecord] = []
 
   static let empty = ChatChunk(textDelta: "", thoughtDelta: nil)
 }
@@ -119,8 +121,10 @@ struct StreamAccumulator: Sendable, Equatable {
   private(set) var text = ""
   private(set) var thought = ""
   private(set) var toolNames: [String] = []
+  private(set) var toolActivity: [ToolActivityRecord] = []
 
   mutating func append(_ chunk: ChatChunk) {
+    toolActivity += chunk.toolActivity
     text += chunk.textDelta
     if let thoughtDelta = chunk.thoughtDelta {
       thought += thoughtDelta
@@ -174,6 +178,8 @@ enum ChatError: Error, Sendable, Equatable {
   case contextFull
   /// The message alone does not fit the context window.
   case messageTooLong
+  /// The reply was stopped before it could overflow the context window.
+  case replyTruncated
   case underlying(message: String)
 
   var displayMessage: String {
@@ -183,6 +189,8 @@ enum ChatError: Error, Sendable, Equatable {
     case .generationCancelled: return "Generation stopped."
     case .contextFull:
       return "This conversation is too long for the model's memory. Start a new chat."
+    case .replyTruncated:
+      return "The reply was cut short because the model's memory filled up. Start a new chat for long answers."
     case .messageTooLong:
       return "This message is too long for the model's memory. Shorten it or raise the KV cache in Settings."
     case .underlying(let message): return message

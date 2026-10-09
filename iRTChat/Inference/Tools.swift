@@ -1,28 +1,5 @@
 import Foundation
 import LiteRTLM
-import Synchronization
-
-/// Records tool invocations as they actually run. LiteRT-LM executes tools
-/// automatically inside the stream and does not surface the calls in the
-/// streamed chunks, so this is the reliable signal that a tool ran.
-/// Append-only so independent readers (the engine's tool chips, the device
-/// harness) can each observe invocations via a cursor without stealing them.
-enum ToolActivity {
-  private static let invocations = Mutex<[String]>([])
-
-  static func record(_ name: String) {
-    invocations.withLock { $0.append(name) }
-    Log.generation.info("tool invoked: \(name, privacy: .public)")
-  }
-
-  /// Cursor for ``invocations(since:)``.
-  static var cursor: Int { invocations.withLock { $0.count } }
-
-  /// Tools invoked after `cursor` was taken.
-  static func invocations(since cursor: Int) -> [String] {
-    invocations.withLock { Array($0.dropFirst(cursor)) }
-  }
-}
 
 // MARK: - Date / time tool
 
@@ -36,7 +13,7 @@ struct CurrentDateTimeTool: Tool {
   var timeZone: String? = nil
 
   func run() async throws -> Any {
-    ToolActivity.record(Self.name)
+    guard ToolBudget.claim() != nil else { return ToolBudget.limitReachedResult }
     let zone: TimeZone
     if let requested = timeZone, let resolved = TimeZone(identifier: requested) {
       zone = resolved
@@ -50,6 +27,7 @@ struct CurrentDateTimeTool: Tool {
     pretty.timeZone = zone
     pretty.dateStyle = .full
     pretty.timeStyle = .short
+    ToolActivity.record(Self.name, summary: "Checked the date and time")
     return [
       "iso8601": iso.string(from: now),
       "human": pretty.string(from: now),
@@ -214,8 +192,10 @@ struct CalculatorTool: Tool {
   var expression: String = ""
 
   func run() async throws -> Any {
-    ToolActivity.record(Self.name)
+    guard let limits = ToolBudget.claim() else { return ToolBudget.limitReachedResult }
+    let shown = ToolBudget.fit(expression, limits)
     let result = try ArithmeticParser.evaluate(expression)
-    return ["expression": expression, "result": result]
+    ToolActivity.record(Self.name, summary: "Calculated \(shown)")
+    return ["expression": shown, "result": result]
   }
 }
