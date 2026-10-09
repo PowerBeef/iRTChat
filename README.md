@@ -39,12 +39,14 @@ No accounts. No API keys. No cloud. After a one-time model download, every conve
 | | |
 | --- | --- |
 | **Fully on-device** | Gemma 4 runs locally on the GPU (Metal) with automatic CPU fallback. Works offline after the first download. |
-| **Streaming replies** | Tokens stream live, with per-reply stats: time to first token, decode speed, and backend. |
-| **Reasoning** | Optional thinking mode streams the model's reasoning into a collapsible card under each reply. |
-| **Multimodal** | Attach photos (with adjustable image detail) and record voice messages up to 30 seconds. |
+| **Streaming replies** | Tokens stream live as rich markdown: headings, lists, tables, highlighted code with Copy, and typeset math. Per-reply stats show time to first token, decode speed, and backend. |
+| **Message actions** | Copy, read aloud, regenerate, edit and resend, share, and switch between versions of a message. |
+| **Reasoning** | The composer's **Think** toggle streams the model's reasoning into a collapsible card above the answer. |
+| **Multimodal** | Take or attach photos (with adjustable image detail) and record voice messages up to 30 seconds. |
+| **Personalization** | Tell iRTChat your name, about yourself, how to respond, and a response style. |
 | **On-device tools** | The model can check the current date and time and evaluate arithmetic, without leaving the phone. |
 | **Speculative decoding** | Multi-token prediction (MTP) speeds up decoding when the model file ships a drafter. |
-| **Chat history** | Conversations persist locally with SwiftData; each chat keeps its own context. |
+| **Chat history** | A side drawer with search and chats grouped by date; rename and delete. Conversations persist locally with SwiftData; each chat keeps its own context. |
 | **Native design** | SwiftUI with Liquid Glass surfaces, haptics, and accessibility identifiers throughout. |
 
 ## Requirements
@@ -64,15 +66,15 @@ No accounts. No API keys. No cloud. After a one-time model download, every conve
 1. Open `iRTChat.xcodeproj`.
 2. The project is configured for team `FK2D8X36G2` and bundle ID `com.patricedery.irtchat`. On another account, change both under **Signing & Capabilities**.
 3. Select the `iRTChat` scheme and your iPhone, then run. Use the **Release** configuration for representative speed.
-4. Open the **Models** tab and download **Gemma 4 E4B** (3.7 GB). Keep the app in the foreground until the download finishes.
-5. Start a chat from the **Chat** tab.
+4. The welcome screen downloads **Gemma 4 E4B** (3.7 GB). The download continues if you leave the app; you can also manage it in **Settings → Models**.
+5. Start chatting. Open the drawer (☰, or swipe from the left edge) for past chats, search and Settings.
 
 > [!NOTE]
 > Automatic signing registers the required capabilities from `iRTChat/iRTChat.entitlements`. If signing fails with *"PLA Update available"*, accept the latest Program License Agreement at [developer.apple.com/account](https://developer.apple.com/account).
 
 ### Explore the UI in the simulator
 
-Run the `iRTChat` scheme on any iPhone simulator with the `--mock-engine` launch argument (**Product → Scheme → Edit Scheme → Run → Arguments**). A scripted engine drives the full interface — chats, streaming bubbles, reasoning cards, and settings — without downloading a model.
+Run the `iRTChat` scheme on any iPhone simulator with the `--mock-engine` launch argument (**Product → Scheme → Edit Scheme → Run → Arguments**). A scripted engine drives the full interface — chats, streaming bubbles, reasoning cards, and settings — without downloading a model. Prompts containing "markdown" return a rich sample (code, table, math).
 
 ## Models
 
@@ -84,12 +86,14 @@ iRTChat runs a single model, **Gemma 4 E4B** — text, vision, audio, reasoning 
 
 E4B was validated for the iPhone 15 Pro floor with an 8 GB memory simulation (incompressible ballast shrinking usable memory to 5.0, 4.0 and 3.5 GB): text, image, audio and 16K inputs all completed without the app being terminated. Speed on A17 Pro hardware is not yet measured. Chats created with Gemma 4 E2B in earlier versions continue on E4B, and the old E2B file is deleted automatically.
 
-The model is the multimodal `.litertlm` build from Hugging Face ([`litert-community`](https://huggingface.co/litert-community)), downloaded at runtime without an account; it is not included in this repository. Downloads support pause and resume, are size- and HTTP-status-verified, check free space first, and are stored in Application Support, excluded from iCloud backup.
+The model is the multimodal `.litertlm` build from Hugging Face ([`litert-community`](https://huggingface.co/litert-community)), downloaded at runtime without an account; it is not included in this repository. Downloads run in a background `URLSession` (they continue when the app is in the background), support pause and resume, are size- and HTTP-status-verified, check free space first, and are stored in Application Support, excluded from iCloud backup.
 
 ### Settings
 
 | Section | Options |
 | --- | --- |
+| **Personalization** | Name · about you · how to respond · response style (Default, Concise, Detailed, Friendly, Professional) |
+| **Models** | Download, pause, resume, or delete the model |
 | **Performance** | GPU or CPU backend · speculative decoding (MTP) · compact reasoning cache |
 | **Reasoning & Memory** | Thinking on/off and token budget · automatic or manual KV-cache size |
 | **Sampling** | Precise (temperature 0.2) · Balanced (0.7) · Creative (1.0) |
@@ -102,7 +106,7 @@ The model is the multimodal `.litertlm` build from Hugging Face ([`litert-commun
 
 ```text
 ┌────────────────────────────── SwiftUI ──────────────────────────────┐
-│  ThreadListView ─▶ ChatView        ModelLibraryView     SettingsView │
+│  ContentView: DrawerView ◀▶ ChatView · MarkdownView · SettingsView  │
 └──────────────────────────────────┬──────────────────────────────────┘
                                    ▼
                      AppState  (@MainActor, @Observable)
@@ -122,7 +126,8 @@ The model is the multimodal `.litertlm` build from Hugging Face ([`litert-commun
 | `LiteRTChatEngine` | The single owner of a LiteRT-LM `Engine` and `Conversation`. Loads through a GPU → CPU, multimodal → text-only ladder, validates each engine, and keeps every request inside the KV cache. |
 | `InferencePlanner` | Pure, tested resolution of user options and device memory into backend, KV-cache size, sampler, thinking budget, visual-token budget, and MTP. Decides when a settings change needs an engine rebuild. |
 | `ContextBudget` | Pure, tested KV-cache arithmetic: token estimates, history trimming, and reply caps. |
-| `ModelStore` | Model downloads, verification, and storage. |
+| `ModelStore` | Background model downloads, verification, and storage. |
+| `MarkdownDocument` | Pure, tested markdown parsing (swift-markdown) into typed blocks, display math, inline LaTeX to Unicode. |
 | `DeviceProfile` | Device memory policy, based on the app's real memory limit. |
 
 ## Reliability
@@ -158,7 +163,7 @@ A larger KV cache slows every reply, so chat uses 8K and only long inputs get mo
 | --- | --- | --- |
 | `iRTChatTests` | Simulator | Planner, context budgeting, device policy, calculator, catalog, downloads, and the app pipeline through the mock engine |
 | `iRTChatDeviceTests` | iPhone | The real engine in-process: download, load, text, chat isolation, stop and continue, tools, thinking, image, audio, settings rebuilds, context limits, titles, benchmark. Opt-in suites: long Thinking, 8 GB memory simulation, context calibration, LiteRT-LM probes. |
-| `iRTChatUITests` | iPhone or simulator | Real taps: new chat, send, Stop, Home button mid-reply, leaving and returning mid-reply, rapid settings changes, Models tab |
+| `iRTChatUITests` | iPhone or simulator | Real taps: send, Stop, Home button mid-reply, leaving and returning mid-reply, rapid settings changes, drawer and search, rename and delete, regenerate / edit / versions, Think, markdown, Models |
 
 **Unit tests (simulator)**
 
@@ -199,10 +204,11 @@ iRTChat/
 ├── iRTChatApp.swift          App entry, SwiftData container, scene lifecycle
 ├── AppState.swift            Engine lifecycle, chat binding, generation pipeline
 ├── iRTChat.entitlements      Extended virtual addressing, increased memory limit
-├── Inference/                Engine actor, planner, context budget, device policy, tools
-├── Models/                   Model catalog and download store
-├── Persistence/              SwiftData models
-├── Views/                    Chat, chat list, models, settings, audio recorder
+├── Inference/                Engine actor, planner, context budget, device policy, tools, personalization
+├── Markdown/                 Markdown parsing, code highlighting, rendering
+├── ModelHub/                 Model catalog and background download store
+├── Persistence/              SwiftData schema versions, branching, store loading
+├── Views/                    Chat, drawer, composer, message actions, settings, onboarding
 └── Support/                  Design tokens, haptics, image preparation, diagnostics
 iRTChatTests/                 Unit tests
 iRTChatDeviceTests/           On-device engine scenarios
@@ -217,15 +223,14 @@ Vendor/LiteRT-LM/             LiteRT-LM v0.18.0 Swift package
 | --- | --- |
 | Signing error *"PLA Update available"* | Accept the latest Program License Agreement at [developer.apple.com/account](https://developer.apple.com/account). |
 | *"Failed to create a bundle instance … iRTChatDeviceTests.xctest"* | The iPhone has an install from before that target existed. Run `xcrun devicectl device uninstall app --device <udid> com.patricedery.irtchat` and retry. This also removes downloaded models. |
-| Download stopped | Downloads run in the foreground only. Tap **Resume** in the **Models** tab; if the app was closed, the download starts over. |
+| Download stopped | Tap **Resume** in **Settings → Models**. Downloads continue in the background, but force-quitting the app cancels them. |
 | *"Older messages were dropped from the model's memory"* | Expected in long chats. Raise the KV-cache size under **Settings → Reasoning & Memory**, or start a new chat. |
 
 ## Known limitations
 
-- Downloads run in the foreground only; keep the app open until they finish.
-- Photos come from the library only; there is no in-app camera capture yet.
+- Force-quitting the app (swiping it away) cancels a model download, as iOS does for all background downloads.
 - When you switch chats, only text history is replayed to the model, not images or audio.
-- Voice messages are not stored; they are marked in the chat.
+- Voice messages are not stored; they are marked in the chat, and replies to them can't be regenerated.
 - The simulator runs the UI with the mock engine only.
 - LiteRT-LM's Swift API does not yet support saving and restoring KV sessions.
 

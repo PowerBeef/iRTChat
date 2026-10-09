@@ -165,8 +165,10 @@ final class ChatFlowUITests: XCTestCase {
     app.buttons["Rename"].tap()
     let field = app.alerts.textFields.firstMatch
     XCTAssertTrue(field.waitForExistence(timeout: 5))
-    field.clearAndType("Greetings")
-    app.alerts.buttons["Save"].tap()
+    field.clearAndType("Greetings\n")
+    if app.alerts.firstMatch.waitForExistence(timeout: 1) {
+      app.alerts.buttons["Save"].tap()
+    }
     XCTAssertTrue(app.navigationBars["Greetings"].waitForExistence(timeout: 5))
 
     element("chat.menu").tap()
@@ -356,7 +358,9 @@ final class ChatFlowUITests: XCTestCase {
 
 extension XCUIElement {
   func clearAndType(_ text: String) {
-    tap()
+    // Tap the trailing edge so the cursor lands after the existing text
+    // (a center tap puts it mid-text on device).
+    coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
     if let current = value as? String, !current.isEmpty {
       typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
     }

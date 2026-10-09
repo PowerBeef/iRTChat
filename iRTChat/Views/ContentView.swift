@@ -80,6 +80,11 @@ struct ContentView: View {
     }
     .alert("Rename chat", isPresented: isRenaming) {
       TextField("Title", text: $renameText)
+        .submitLabel(.done)
+        .onSubmit {
+          commitRename()
+          renaming = nil
+        }
         .accessibilityIdentifier("rename.field")
       Button("Save") { commitRename() }
       Button("Cancel", role: .cancel) {}
