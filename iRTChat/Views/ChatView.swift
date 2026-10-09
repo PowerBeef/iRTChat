@@ -30,12 +30,18 @@ struct ChatView: View {
       engineBanner
       noticeBanner
       messagesList(turns, versions: versions)
-      editingBar
-      pendingBar
-      inputBar
+        .frame(maxHeight: .infinity)
+      // Composer rows keep their full height; the messages area above
+      // shrinks instead (e.g. above the keyboard), so nothing is pushed under it.
+      Group {
+        editingBar
+        pendingBar
+        inputBar
+      }
+      .layoutPriority(1)
     }
     .background(ambientBackground)
-    .navigationTitle(thread?.title ?? "iRTChat")
+    .navigationTitle(thread?.title ?? "")
     .navigationBarTitleDisplayMode(.inline)
     .sheet(isPresented: $showLibrary) {
       NavigationStack {
@@ -183,60 +189,30 @@ struct ChatView: View {
     }
   }
 
-  private var suggestions: [String] {
-    [
-      "Explain black holes like I'm five",
-      "Write a haiku about the sea",
-      "Give me three dinner ideas",
-    ]
-  }
-
+  /// A new chat: a short greeting, nothing else to read or tap.
   private var emptyState: some View {
-    VStack(spacing: DS.spaceLG) {
+    VStack {
       Spacer()
-      Image(systemName: "sparkles")
-        .font(.title2)
-        .frame(width: DS.heroMark, height: DS.heroMark)
-        .glassEffect(.regular.tint(.accentColor), in: .circle)
-      Text("Chat with \(appState.store.activeSpec.displayName)")
-        .font(.title3)
-        .bold()
+      Text(greeting)
+        .font(.title2.weight(.semibold))
         .multilineTextAlignment(.center)
-      Text("Private and on-device. Pick a starter or write your own.")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-      GlassEffectContainer(spacing: 8) {
-        VStack(spacing: 8) {
-          ForEach(suggestions, id: \.self) { suggestion in
-            Button(action: { sendSuggestion(suggestion) }) {
-              HStack {
-                Text(suggestion)
-                  .font(.callout)
-                  .lineLimit(1)
-                Spacer(minLength: 8)
-                Image(systemName: "arrow.up.right")
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-              }
-              .padding(.horizontal, 16)
-              .padding(.vertical, DS.padMD)
-              .glassEffect(.regular.interactive(), in: .capsule)
-            }
-            .accessibilityIdentifier("chat.suggestion")
-          }
-        }
-      }
-      .padding(.top, 6)
+        .accessibilityIdentifier("chat.empty")
       Spacer()
     }
+    .frame(maxWidth: .infinity)
     .padding(.horizontal, 24)
+    .contentShape(.rect)
+    .onTapGesture { inputFocused = false }
   }
 
-  private func sendSuggestion(_ text: String) {
-    draft = text
-    send()
+  private var greeting: String {
+    let name = appState.personalization.enabled
+      ? appState.personalization.name.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+    return name.isEmpty
+      ? String(localized: "What can I help with?")
+      : String(localized: "What can I help with, \(name)?")
   }
+
 
   // MARK: - Message actions
 
@@ -392,6 +368,8 @@ struct ChatView: View {
     }
     .padding(10)
     .glassEffect(.regular, in: .rect(cornerRadius: 26))
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("chat.composer")
     .padding(.horizontal, 12)
     .padding(.bottom, 6)
     .photosPicker(isPresented: $showPhotos, selection: $photoItem, matching: .images)

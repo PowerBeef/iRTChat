@@ -74,7 +74,7 @@ No accounts. No API keys. No cloud. After a one-time model download, every conve
 
 ### Explore the UI in the simulator
 
-Run the `iRTChat` scheme on any iPhone simulator with the `--mock-engine` launch argument (**Product → Scheme → Edit Scheme → Run → Arguments**). A scripted engine drives the full interface — chats, streaming bubbles, reasoning cards, and settings — without downloading a model. Prompts containing "markdown" return a rich sample (code, table, math).
+Run the `iRTChat` scheme on any iPhone simulator with the `--mock-engine` launch argument (**Product → Scheme → Edit Scheme → Run → Arguments**). A scripted engine drives the full interface — chats, streaming replies, reasoning cards, and settings — without downloading a model. Prompts containing "markdown" return a rich sample (code, table, math).
 
 ## Models
 

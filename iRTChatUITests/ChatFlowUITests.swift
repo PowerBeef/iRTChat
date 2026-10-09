@@ -134,7 +134,7 @@ final class ChatFlowUITests: XCTestCase {
     try waitForReplyToFinish(timeout: 120)
 
     element("chat.new").tap()
-    XCTAssertTrue(element("chat.suggestion").waitForExistence(timeout: 5), "New chat not empty")
+    XCTAssertTrue(element("chat.empty").waitForExistence(timeout: 5), "New chat not empty")
     openDrawer()
     XCTAssertEqual(rows().count, 1, "Unused new chat was saved")
     attachScreenshot("drawer")
@@ -174,7 +174,7 @@ final class ChatFlowUITests: XCTestCase {
     element("chat.menu").tap()
     app.buttons["Delete"].tap()
     app.buttons["Delete"].firstMatch.tap()
-    XCTAssertTrue(element("chat.suggestion").waitForExistence(timeout: 5))
+    XCTAssertTrue(element("chat.empty").waitForExistence(timeout: 5))
     openDrawer()
     XCTAssertEqual(rows().count, 0)
   }
@@ -284,6 +284,25 @@ final class ChatFlowUITests: XCTestCase {
     try waitForEngineReady()
   }
 
+  /// The whole composer (including its bottom row of buttons) must sit
+  /// above the software keyboard, not just the text field.
+  private func assertComposerClearsKeyboard() {
+    let keyboard = app.keyboards.firstMatch
+    guard keyboard.waitForExistence(timeout: 2) else { return }
+    // Let the keyboard and the composer finish animating.
+    usleep(600_000)
+    let composer = element("chat.composer").frame
+    let send = element("chat.send").exists ? element("chat.send").frame : element("chat.stop").frame
+    let top = keyboard.frame.minY
+    let report = "window=\(app.windows.firstMatch.frame) keyboard=\(keyboard.frame) composer=\(composer) send=\(send)"
+    let attachment = XCTAttachment(string: report)
+    attachment.name = "keyboard-frames"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    XCTAssertLessThanOrEqual(composer.maxY, top + 1, "The keyboard covers the composer: \(report)")
+    XCTAssertLessThanOrEqual(send.maxY, top + 1, "The keyboard covers Send: \(report)")
+  }
+
   private func openDrawer() {
     element("chat.drawer").tap()
     XCTAssertTrue(element("drawer.search").waitForExistence(timeout: 5), "Drawer did not open")
@@ -318,11 +337,7 @@ final class ChatFlowUITests: XCTestCase {
   private func send(_ text: String) {
     let input = element("chat.input")
     input.tap()
-    let keyboard = app.keyboards.firstMatch
-    if keyboard.waitForExistence(timeout: 2) {
-      XCTAssertLessThanOrEqual(
-        input.frame.maxY, keyboard.frame.minY + 1, "The keyboard covers the message field")
-    }
+    assertComposerClearsKeyboard()
     input.typeText(text)
     element("chat.send").tap()
   }
@@ -365,5 +380,30 @@ extension XCUIElement {
       typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
     }
     typeText(text)
+  }
+}
+
+extension ChatFlowUITests {
+  /// With the keyboard up, the composer's bottom row must stay tappable.
+  /// Checked by real taps: XCTest's keyboard frame excludes the predictive
+  /// bar, so frame comparisons alone miss an overlap.
+  func testKeyboardDoesNotCoverComposer() throws {
+    let input = app.descendants(matching: .any).matching(identifier: "chat.input").firstMatch
+    XCTAssertTrue(input.waitForExistence(timeout: 10))
+    input.tap()
+    try XCTSkipUnless(app.keyboards.firstMatch.waitForExistence(timeout: 3), "No software keyboard")
+    usleep(800_000)
+    let screenshot = XCTAttachment(screenshot: app.screenshot())
+    screenshot.name = "keyboard"
+    screenshot.lifetime = .keepAlways
+    add(screenshot)
+
+    let think = app.descendants(matching: .any).matching(identifier: "composer.think").firstMatch
+    let before = think.value as? String
+    think.tap()
+    XCTAssertNotEqual(think.value as? String, before, "Think is under the keyboard")
+    think.tap()
+    XCTAssertEqual(think.value as? String, before)
+    XCTAssertTrue(app.keyboards.firstMatch.exists, "Keyboard closed: taps missed the composer")
   }
 }
