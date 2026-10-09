@@ -167,18 +167,24 @@ xcodebuild test -project iRTChat.xcodeproj -scheme iRTChat \
 
 **On-device harness** (connected, unlocked iPhone; downloads E2B if missing)
 
+The harness targets the `deviceId` in `.mobilebuildmcp/config.yaml`, a local, git-ignored file. Create it once from the template and set your iPhone's UDID (`xcrun devicectl list devices`), or pass `DEVICE_ID=<udid>` per run:
+
+```sh
+cp .mobilebuildmcp/config.example.yaml .mobilebuildmcp/config.yaml
+```
+
 ```sh
 scripts/device-harness.sh inference   # engine scenarios
 scripts/device-harness.sh ui          # real-tap UI flows
 scripts/device-harness.sh e4b         # opt-in E4B scenarios (3.7 GB download)
 scripts/device-harness.sh all         # inference, then UI
 
-DEVICE_ID=<udid> scripts/device-harness.sh all   # another iPhone
+DEVICE_ID=<udid> scripts/device-harness.sh all   # a specific iPhone
 ```
 
 Results are written to `build/device-harness/`: result bundles, per-scenario JSON metrics and screenshots, and `harness-report.json` pulled from the device. The app logs under the subsystem `com.patricedery.irtchat` with categories `engine`, `generation`, and `lifecycle`.
 
-[MobileBuildMCP](https://github.com/getsentry/xcodebuildmcp.com) users get project defaults from `.mobilebuildmcp/config.yaml`, including a `device-tests` profile for `test_device`.
+[MobileBuildMCP](https://github.com/getsentry/xcodebuildmcp.com) reads the same `.mobilebuildmcp/config.yaml` for project defaults, including a `device-tests` profile for `test_device`.
 
 ## Project structure
 

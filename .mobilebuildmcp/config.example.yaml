@@ -1,3 +1,6 @@
+# MobileBuildMCP project config. Copy to config.yaml (git-ignored) and set
+# your iPhone's UDID (`xcrun devicectl list devices`). config.yaml is also
+# read by scripts/device-harness.sh to pick the default device.
 schemaVersion: 1
 
 # On-device inference can only be validated on a physical iPhone; the
@@ -8,7 +11,6 @@ enabledWorkflows: ["simulator", "device", "debugging"]
 sessionDefaults:
   projectPath: "./iRTChat.xcodeproj"
   scheme: "iRTChat"
-  # iPhone de Patrice (iPhone 17 Pro, 8 GB)
   deviceId: "<your-iphone-udid>"
   # Debug builds of the LiteRT-LM path are misleadingly slow for inference.
   configuration: "Release"

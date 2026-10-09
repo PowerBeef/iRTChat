@@ -28,3 +28,6 @@ fastlane/test_output
 
 # Misc
 *.orig
+
+# Local MobileBuildMCP config (contains device UDIDs); see config.example.yaml
+.mobilebuildmcp/config.yaml

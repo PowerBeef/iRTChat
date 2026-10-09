@@ -12,14 +12,26 @@
 #   e4b        Opt-in E4B scenarios (3.7 GB download).
 #   all        inference, then ui.
 #
-# Env: DEVICE_ID (default: iPhone de Patrice), OUT (default: build/device-harness).
+# Env: DEVICE_ID (default: deviceId from the git-ignored .mobilebuildmcp/config.yaml),
+#      OUT (default: build/device-harness).
 # Outputs: $OUT/<suite>.xcresult, $OUT/attachments/, $OUT/harness-report.json
 set -eu
 
 SUITE="${1:-all}"
 [ $# -gt 0 ] && shift
-DEVICE_ID="${DEVICE_ID:-<your-iphone-udid>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LOCAL_CONFIG="$ROOT/.mobilebuildmcp/config.yaml"
+if [ -z "${DEVICE_ID:-}" ] && [ -f "$LOCAL_CONFIG" ]; then
+  DEVICE_ID="$(sed -n 's/^[[:space:]]*deviceId:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' \
+    "$LOCAL_CONFIG" | head -n 1)"
+fi
+case "${DEVICE_ID:-}" in
+  "" | "<your-iphone-udid>")
+    echo "No device. Set DEVICE_ID=<udid>, or copy .mobilebuildmcp/config.example.yaml" >&2
+    echo "to .mobilebuildmcp/config.yaml and set deviceId (xcrun devicectl list devices)." >&2
+    exit 2
+    ;;
+esac
 OUT="${OUT:-$ROOT/build/device-harness}"
 BUNDLE_ID="com.patricedery.irtchat"
 mkdir -p "$OUT"
