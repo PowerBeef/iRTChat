@@ -170,6 +170,10 @@ enum ChatError: Error, Sendable, Equatable {
   case engineNotReady
   case modelFileMissing
   case generationCancelled
+  /// No room left in the context window for a reply.
+  case contextFull
+  /// The message alone does not fit the context window.
+  case messageTooLong
   case underlying(message: String)
 
   var displayMessage: String {
@@ -177,6 +181,10 @@ enum ChatError: Error, Sendable, Equatable {
     case .engineNotReady: return "The model isn't loaded yet."
     case .modelFileMissing: return "Model file is missing. Please re-download it."
     case .generationCancelled: return "Generation stopped."
+    case .contextFull:
+      return "This conversation is too long for the model's memory. Start a new chat."
+    case .messageTooLong:
+      return "This message is too long for the model's memory. Shorten it or raise the KV cache in Settings."
     case .underlying(let message): return message
     }
   }

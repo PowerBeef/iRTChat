@@ -32,7 +32,10 @@ struct SettingsView: View {
         }
       }
       .onChange(of: appState.options) {
-        Task { await appState.applyCurrentOptions() }
+        appState.scheduleApplyOptions()
+      }
+      .onChange(of: appState.enableTools) {
+        appState.scheduleApplyOptions()
       }
     }
   }
@@ -51,6 +54,7 @@ struct SettingsView: View {
             .font(.headline)
           Text(statusLine)
             .font(.caption)
+            .accessibilityIdentifier("settings.status")
             .foregroundStyle(.secondary)
         }
         Spacer()
@@ -196,8 +200,8 @@ struct SettingsView: View {
       TextEditor(text: $systemDraft)
         .frame(minHeight: 80)
       Button(action: {
+        // Applied through the `options` onChange above.
         appState.options.systemPrompt = systemDraft
-        Task { await appState.applyCurrentOptions() }
       }) {
         Text("Apply system prompt")
           .frame(maxWidth: .infinity)
@@ -228,6 +232,7 @@ struct SettingsView: View {
         .buttonStyle(.glassProminent)
         .controlSize(.regular)
         .disabled(!appState.store.isDownloaded(appState.store.activeSpec))
+        .accessibilityIdentifier("settings.benchmark")
       }
       if let report = appState.benchmarkReport {
         benchmarkStats(report)

@@ -43,7 +43,24 @@ Models come from Hugging Face (`litert-community`, ungated, Apache-2.0) with pau
 
 ### Tests
 
-Run the `iRTChat` scheme tests. The committed XCTest suite (34 tests) covers the inference planner, device gating, calculator tool, stream accumulator, model catalog (URLs + verified byte sizes), and the download store.
+| Target | Runs on | Covers |
+| --- | --- | --- |
+| `iRTChatTests` | Simulator or device | Pure logic and the app pipeline through the mock engine: planner, device gating, calculator, catalog, download store, engine lifecycle (load coalescing, thread ↔ conversation binding) |
+| `iRTChatDeviceTests` | Physical iPhone only (skips on simulator) | The real LiteRT-LM engine in-process: model download, load ladder, text, chat isolation, Stop, tools, thinking, image, audio, settings round-trip, context limit, benchmark. `E4BScenarioTests` is opt-in (`HARNESS_E4B=1`). |
+| `iRTChatUITests` | Device (real model) or simulator (mock engine) | Real taps: send, Stop, Home button mid-reply, leave/return mid-reply, rapid Settings edits, Models tab |
+
+Fast loop (simulator): run the scheme's tests with `-only-testing:iRTChatTests`.
+
+On-device harness (physical iPhone, Debug build, model downloaded automatically):
+
+```sh
+scripts/device-harness.sh inference   # in-app engine scenarios
+scripts/device-harness.sh ui          # real-tap flows
+scripts/device-harness.sh e4b         # opt-in E4B (3.7 GB)
+DEVICE_ID=<udid> scripts/device-harness.sh all
+```
+
+Results land in `build/device-harness/`: the `.xcresult` bundles, exported attachments (per-scenario JSON metrics and screenshots), and `harness-report.json` pulled from the app's Documents folder. The app logs under subsystem `com.patricedery.irtchat` (categories `engine`, `generation`, `lifecycle`). If a run fails with "Failed to create a bundle instance … iRTChatDeviceTests.xctest", the phone has a stale install from before that target existed: `xcrun devicectl device uninstall app --device <udid> com.patricedery.irtchat` and rerun (this also deletes downloaded models). MobileBuildMCP users can switch to the `device-tests` profile in `.mobilebuildmcp/config.yaml` and call `test_device`.
 
 ## Performance
 

@@ -5,16 +5,21 @@ struct ThreadListView: View {
   @Environment(AppState.self) private var appState
   @Environment(\.modelContext) private var context
   @Query(sort: \ChatThread.createdAt, order: .reverse) private var threads: [ChatThread]
+  @State private var path: [ChatThread] = []
 
   var body: some View {
-    NavigationStack {
+    NavigationStack(path: $path) {
       Group {
         if threads.isEmpty {
-          ContentUnavailableView(
-            "No chats yet",
-            systemImage: "sparkles",
-            description: Text("Start a new on-device chat.")
-          )
+          ContentUnavailableView {
+            Label("No chats yet", systemImage: "sparkles")
+          } description: {
+            Text("Start a new on-device chat.")
+          } actions: {
+            Button("New chat", action: startNewChat)
+              .buttonStyle(.glassProminent)
+              .accessibilityIdentifier("threads.empty.new")
+          }
         } else {
           List {
             ForEach(threads) { thread in
@@ -34,6 +39,7 @@ struct ThreadListView: View {
                 }
                 .padding(.vertical, 2)
               }
+              .accessibilityIdentifier("threads.row")
             }
             .onDelete(perform: delete)
           }
@@ -42,16 +48,22 @@ struct ThreadListView: View {
       .navigationTitle("Chats")
       .toolbar {
         ToolbarItem(placement: .primaryAction) {
-          Button(action: { _ = appState.newThread(in: context) }) {
+          Button(action: startNewChat) {
             Image(systemName: "square.and.pencil")
           }
           .accessibilityLabel("New chat")
+          .accessibilityIdentifier("threads.new")
         }
       }
       .navigationDestination(for: ChatThread.self) { thread in
         ChatView(thread: thread)
       }
     }
+  }
+
+  /// Create a chat and open it immediately.
+  private func startNewChat() {
+    path = [appState.newThread(in: context)]
   }
 
   private func subtitle(for thread: ChatThread) -> String {

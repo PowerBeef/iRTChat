@@ -1,20 +1,32 @@
+import Observation
 import XCTest
 
 @testable import iRTChat
+
+private final class Flag: @unchecked Sendable {
+  var value = false
+}
 
 /// Regression tests for the download-finishing path: the temp file must be
 /// moved synchronously and size-verified (async hops let the system delete it).
 final class ModelStoreTests: XCTestCase {
   private var scratch: URL!
+  private var savedActiveModelID: String?
 
   override func setUpWithError() throws {
     scratch = FileManager.default.temporaryDirectory
       .appendingPathComponent("ModelStoreTests-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+    savedActiveModelID = UserDefaults.standard.string(forKey: "activeModelID")
   }
 
   override func tearDownWithError() throws {
     try? FileManager.default.removeItem(at: scratch)
+    if let savedActiveModelID {
+      UserDefaults.standard.set(savedActiveModelID, forKey: "activeModelID")
+    } else {
+      UserDefaults.standard.removeObject(forKey: "activeModelID")
+    }
   }
 
   func testPlaceDownloadedFileMovesAndVerifies() throws {
@@ -66,5 +78,31 @@ final class ModelStoreTests: XCTestCase {
       from: source, fileName: "model.litertlm", expectedSize: 8, in: models)
     let data = try Data(contentsOf: placed)
     XCTAssertEqual(data, Data(repeating: 0xFF, count: 8))
+  }
+
+  // MARK: - Active model selection
+
+  @MainActor
+  func testActiveModelIDPersistsAcrossInstances() {
+    let store = ModelStore()
+    let other: ModelID = store.activeModelID == .e2b ? .e4b : .e2b
+    store.activeModelID = other
+    XCTAssertEqual(ModelStore().activeModelID, other)
+  }
+
+  @MainActor
+  func testActiveModelIDChangeNotifiesObservers() {
+    // "Use this model" must move the Active badge and refresh pickers:
+    // a UserDefaults-backed computed property emits no observation.
+    let store = ModelStore()
+    let other: ModelID = store.activeModelID == .e2b ? .e4b : .e2b
+    let flag = Flag()
+    withObservationTracking {
+      _ = store.activeModelID
+    } onChange: {
+      flag.value = true
+    }
+    store.activeModelID = other
+    XCTAssertTrue(flag.value)
   }
 }

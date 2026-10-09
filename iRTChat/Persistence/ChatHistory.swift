@@ -27,10 +27,12 @@ final class ChatThread {
     turns.sorted { $0.createdAt < $1.createdAt }
   }
 
-  /// Text history for re-seeding the native conversation after option changes.
+  /// Text history for re-seeding the native conversation. Skips empty turns
+  /// and failed replies (persisted as "Error: …"), which the model never said.
   var textHistory: [(role: ChatRole, text: String)] {
     orderedTurns.compactMap { turn in
       guard !turn.text.isEmpty else { return nil }
+      if turn.chatRole == .model, turn.text.hasPrefix(ChatTurn.errorPrefix) { return nil }
       return (turn.chatRole, turn.text)
     }
   }
@@ -64,6 +66,9 @@ final class ChatTurn {
     self.imageData = imageData
     self.createdAt = Date()
   }
+
+  /// Prefix of model turns that record a failed generation.
+  static let errorPrefix = "Error: "
 
   var chatRole: ChatRole { roleRaw == "model" ? .model : .user }
   var isUser: Bool { chatRole == .user }

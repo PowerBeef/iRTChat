@@ -154,6 +154,55 @@ final class InferencePlannerTests: XCTestCase {
         .filterThoughtFromCache)
   }
 
+  // MARK: - Engine reload vs. conversation update (audit #4)
+
+  func testEngineLevelChangesRequireReload() {
+    let base = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+    for mutate in [
+      { (o: inout InferenceOptions) in o.enableVision = false },
+      { (o: inout InferenceOptions) in o.enableAudio = false },
+      { (o: inout InferenceOptions) in o.backendPreference = .cpu },
+      { (o: inout InferenceOptions) in o.maxNumTokensOverride = 1024 },
+      { (o: inout InferenceOptions) in o.enableSpeculativeDecoding = false },
+    ] {
+      var options = InferenceOptions()
+      mutate(&options)
+      let requested = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+      XCTAssertTrue(InferencePlanner.requiresEngineReload(built: base, requested: requested))
+    }
+  }
+
+  func testConversationLevelChangesDoNotReload() {
+    let base = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+    var options = InferenceOptions()
+    options.samplerPreset = .creative
+    options.enableThinking = true
+    options.visualDetail = .detailed
+    options.compactReasoningCache = true
+    options.systemPrompt = "Be terse."
+    let requested = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    XCTAssertFalse(InferencePlanner.requiresEngineReload(built: base, requested: requested))
+  }
+
+  func testConversationUpdateKeepsEngineFallbacks() {
+    var engine = InferencePlanner.resolve(
+      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
+    engine.useGPU = false  // GPU failed at load
+    engine.enableVision = false  // no vision executor
+    engine.visualTokenBudget = nil
+    var options = InferenceOptions()
+    options.samplerPreset = .precise
+    options.visualDetail = .detailed
+    let plan = InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy)
+    let updated = InferencePlanner.conversationUpdate(engine: engine, plan: plan)
+    XCTAssertFalse(updated.useGPU)
+    XCTAssertFalse(updated.enableVision, "Must not claim vision the engine lacks")
+    XCTAssertNil(updated.visualTokenBudget)
+    XCTAssertEqual(updated.temperature, SamplerPreset.precise.temperature)
+  }
+
   func testSamplerPresets() {
     var options = InferenceOptions()
     options.samplerPreset = .precise

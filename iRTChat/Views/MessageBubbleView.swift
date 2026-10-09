@@ -30,6 +30,7 @@ struct MessageBubbleView: View {
         if !turn.text.isEmpty {
           Text(turn.text)
             .textSelection(.enabled)
+            .accessibilityIdentifier("message.user")
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .glassEffect(.regular.tint(.accentColor), in: .rect(cornerRadius: DS.radiusBubble))
@@ -51,6 +52,7 @@ struct MessageBubbleView: View {
           HStack(alignment: .lastTextBaseline, spacing: 3) {
             renderedText(turn.text)
               .textSelection(.enabled)
+              .accessibilityIdentifier("message.model")
             if isStreaming {
               RoundedRectangle(cornerRadius: 1.5)
                 .fill(Color.accentColor)
@@ -77,6 +79,7 @@ struct MessageBubbleView: View {
             .font(.caption2)
             .monospacedDigit()
             .foregroundStyle(.tertiary)
+            .accessibilityIdentifier("message.stats")
         }
       }
       Spacer(minLength: 4)
@@ -114,6 +117,7 @@ struct MessageBubbleView: View {
     }
     .padding(DS.padMD)
     .glassEffect(.regular, in: .rect(cornerRadius: DS.radiusInner))
+    .accessibilityIdentifier("message.reasoning")
   }
 
   private var toolChips: some View {
@@ -125,6 +129,7 @@ struct MessageBubbleView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, DS.spaceXS)
             .glassEffect(.regular, in: .capsule)
+            .accessibilityIdentifier("message.tool")
         }
       }
     }

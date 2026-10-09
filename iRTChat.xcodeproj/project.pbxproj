@@ -27,12 +27,15 @@
 		300000000000000000000018 /* ImagePreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* ImagePreparer.swift */; };
 		300000000000000000000028 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* Haptics.swift */; };
 		300000000000000000000031 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000031 /* DesignTokens.swift */; };
+		400000000000000000000022 /* Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400000000000000000000021 /* Diagnostics.swift */; };
 		300000000000000000000019 /* InferencePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* InferencePlannerTests.swift */; };
 		300000000000000000000020 /* DeviceProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* DeviceProfileTests.swift */; };
 		300000000000000000000021 /* CalculatorToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* CalculatorToolTests.swift */; };
 		300000000000000000000022 /* StreamAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* StreamAccumulatorTests.swift */; };
 		300000000000000000000023 /* ModelCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* ModelCatalogTests.swift */; };
 		300000000000000000000026 /* ModelStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000027 /* ModelStoreTests.swift */; };
+		300000000000000000000098 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000099 /* AppStateTests.swift */; };
+		400000000000000000000032 /* ContextBudgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400000000000000000000031 /* ContextBudgetTests.swift */; };
 		300000000000000000000024 /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = 100000000000000000000006 /* LiteRTLM */; };
 /* End PBXBuildFile section */
 
@@ -51,6 +54,20 @@
 
 /* Begin PBXContainerItemProxy section */
 		100000000000000000000021 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000002;
+			remoteInfo = iRTChat;
+		};
+		400000000000000000000008 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000002;
+			remoteInfo = iRTChat;
+		};
+		400000000000000000000018 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 100000000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -82,13 +99,31 @@
 		200000000000000000000018 /* ImagePreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreparer.swift; sourceTree = "<group>"; };
 		200000000000000000000029 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		200000000000000000000031 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
+		400000000000000000000021 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
 		200000000000000000000019 /* InferencePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferencePlannerTests.swift; sourceTree = "<group>"; };
 		200000000000000000000020 /* DeviceProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfileTests.swift; sourceTree = "<group>"; };
 		200000000000000000000021 /* CalculatorToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorToolTests.swift; sourceTree = "<group>"; };
 		200000000000000000000022 /* StreamAccumulatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAccumulatorTests.swift; sourceTree = "<group>"; };
 		200000000000000000000023 /* ModelCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogTests.swift; sourceTree = "<group>"; };
 		200000000000000000000027 /* ModelStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelStoreTests.swift; sourceTree = "<group>"; };
+		200000000000000000000099 /* AppStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
+		400000000000000000000031 /* ContextBudgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextBudgetTests.swift; sourceTree = "<group>"; };
+		400000000000000000000001 /* iRTChatDeviceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iRTChatDeviceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		400000000000000000000011 /* iRTChatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iRTChatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		400000000000000000000002 /* iRTChatDeviceTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = iRTChatDeviceTests;
+			sourceTree = "<group>";
+		};
+		400000000000000000000012 /* iRTChatUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = iRTChatUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		100000000000000000000008 /* Frameworks */ = {
@@ -106,6 +141,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		400000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		400000000000000000000015 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -114,6 +163,8 @@
 			children = (
 				10000000000000000000000E /* iRTChat */,
 				100000000000000000000014 /* iRTChatTests */,
+				400000000000000000000002 /* iRTChatDeviceTests */,
+				400000000000000000000012 /* iRTChatUITests */,
 				100000000000000000000015 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -181,6 +232,7 @@
 				200000000000000000000018 /* ImagePreparer.swift */,
 				200000000000000000000029 /* Haptics.swift */,
 				200000000000000000000031 /* DesignTokens.swift */,
+				400000000000000000000021 /* Diagnostics.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -194,6 +246,8 @@
 				200000000000000000000022 /* StreamAccumulatorTests.swift */,
 				200000000000000000000023 /* ModelCatalogTests.swift */,
 				200000000000000000000027 /* ModelStoreTests.swift */,
+				200000000000000000000099 /* AppStateTests.swift */,
+				400000000000000000000031 /* ContextBudgetTests.swift */,
 			);
 			path = iRTChatTests;
 			sourceTree = "<group>";
@@ -203,6 +257,8 @@
 			children = (
 				100000000000000000000016 /* iRTChat.app */,
 				100000000000000000000017 /* iRTChatTests.xctest */,
+				400000000000000000000001 /* iRTChatDeviceTests.xctest */,
+				400000000000000000000011 /* iRTChatUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -249,6 +305,48 @@
 			productReference = 100000000000000000000017 /* iRTChatTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		400000000000000000000003 /* iRTChatDeviceTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 400000000000000000000009 /* Build configuration list for PBXNativeTarget "iRTChatDeviceTests" */;
+			buildPhases = (
+				400000000000000000000004 /* Sources */,
+				400000000000000000000005 /* Frameworks */,
+				400000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				400000000000000000000007 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				400000000000000000000002 /* iRTChatDeviceTests */,
+			);
+			name = iRTChatDeviceTests;
+			productName = iRTChatDeviceTests;
+			productReference = 400000000000000000000001 /* iRTChatDeviceTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		400000000000000000000013 /* iRTChatUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 400000000000000000000019 /* Build configuration list for PBXNativeTarget "iRTChatUITests" */;
+			buildPhases = (
+				400000000000000000000014 /* Sources */,
+				400000000000000000000015 /* Frameworks */,
+				400000000000000000000016 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				400000000000000000000017 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				400000000000000000000012 /* iRTChatUITests */,
+			);
+			name = iRTChatUITests;
+			productName = iRTChatUITests;
+			productReference = 400000000000000000000011 /* iRTChatUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -264,6 +362,14 @@
 					};
 					100000000000000000000003 = {
 						CreatedOnToolsVersion = 17.0;
+						TestTargetID = 100000000000000000000002;
+					};
+					400000000000000000000003 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 100000000000000000000002;
+					};
+					400000000000000000000013 = {
+						CreatedOnToolsVersion = 27.0;
 						TestTargetID = 100000000000000000000002;
 					};
 				};
@@ -286,6 +392,8 @@
 			targets = (
 				100000000000000000000002 /* iRTChat */,
 				100000000000000000000003 /* iRTChatTests */,
+				400000000000000000000003 /* iRTChatDeviceTests */,
+				400000000000000000000013 /* iRTChatUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -299,6 +407,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		10000000000000000000000C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		400000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		400000000000000000000016 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -332,6 +454,7 @@
 				300000000000000000000018 /* ImagePreparer.swift in Sources */,
 				300000000000000000000028 /* Haptics.swift in Sources */,
 				300000000000000000000031 /* DesignTokens.swift in Sources */,
+				400000000000000000000022 /* Diagnostics.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -345,6 +468,22 @@
 				300000000000000000000022 /* StreamAccumulatorTests.swift in Sources */,
 				300000000000000000000023 /* ModelCatalogTests.swift in Sources */,
 				300000000000000000000026 /* ModelStoreTests.swift in Sources */,
+				300000000000000000000098 /* AppStateTests.swift in Sources */,
+				400000000000000000000032 /* ContextBudgetTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		400000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		400000000000000000000014 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -355,6 +494,16 @@
 			isa = PBXTargetDependency;
 			target = 100000000000000000000002 /* iRTChat */;
 			targetProxy = 100000000000000000000021 /* PBXContainerItemProxy */;
+		};
+		400000000000000000000007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000002 /* iRTChat */;
+			targetProxy = 400000000000000000000008 /* PBXContainerItemProxy */;
+		};
+		400000000000000000000017 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000002 /* iRTChat */;
+			targetProxy = 400000000000000000000018 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -431,7 +580,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_ENTITLEMENTS = iRTChat/iRTChat.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = FK2D8X36G2;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = iRTChat;
@@ -442,7 +593,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.irt.chat;
+				PRODUCT_BUNDLE_IDENTIFIER = com.patricedery.irtchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -458,7 +609,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_ENTITLEMENTS = iRTChat/iRTChat.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = FK2D8X36G2;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = iRTChat;
@@ -469,7 +622,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.irt.chat;
+				PRODUCT_BUNDLE_IDENTIFIER = com.patricedery.irtchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -486,11 +639,12 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = FK2D8X36G2;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.irt.chat.tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.patricedery.irtchat.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -509,11 +663,12 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = FK2D8X36G2;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.irt.chat.tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.patricedery.irtchat.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -523,6 +678,100 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/../Frameworks",
+				);
+			};
+			name = Release;
+		};
+		40000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = FK2D8X36G2;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.patricedery.irtchat.devicetests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/iRTChat.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/iRTChat";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/../Frameworks",
+				);
+			};
+			name = Debug;
+		};
+		40000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = FK2D8X36G2;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.patricedery.irtchat.devicetests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/iRTChat.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/iRTChat";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/../Frameworks",
+				);
+			};
+			name = Release;
+		};
+		40000000000000000000001A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = FK2D8X36G2;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.patricedery.irtchat.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = iRTChat;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+			};
+			name = Debug;
+		};
+		40000000000000000000001B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = FK2D8X36G2;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.patricedery.irtchat.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = iRTChat;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
 				);
 			};
 			name = Release;
@@ -553,6 +802,24 @@
 			buildConfigurations = (
 				10000000000000000000001F /* Debug */,
 				100000000000000000000020 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		400000000000000000000009 /* Build configuration list for PBXNativeTarget "iRTChatDeviceTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				40000000000000000000000A /* Debug */,
+				40000000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		400000000000000000000019 /* Build configuration list for PBXNativeTarget "iRTChatUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				40000000000000000000001A /* Debug */,
+				40000000000000000000001B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

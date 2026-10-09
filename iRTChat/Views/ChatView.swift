@@ -36,10 +36,8 @@ struct ChatView: View {
     } message: {
       Text("Enable microphone access in Settings to send voice messages.")
     }
-    .task {
-      if thread.modelID == appState.store.activeModelID {
-        await appState.ensureEngineLoaded()
-      }
+    .task(id: thread.id) {
+      await appState.activate(thread)
     }
   }
 
@@ -63,7 +61,7 @@ struct ChatView: View {
         Button("Switch") {
           Task {
             await appState.switchModel(to: thread.modelID)
-            try? await appState.engine.reseed(history: thread.textHistory)
+            await appState.activate(thread)
           }
         }
         .buttonStyle(.bordered)
@@ -73,6 +71,8 @@ struct ChatView: View {
       .glassEffect(.regular, in: .rect(cornerRadius: DS.radiusBanner))
       .padding(.horizontal)
       .padding(.top, 6)
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("chat.banner.mismatch")
     }
   }
 
@@ -80,10 +80,11 @@ struct ChatView: View {
   private var engineBanner: some View {
     switch appState.engineState {
     case .idle:
-      if !appState.store.isDownloaded(appState.store.activeSpec) {
+      if !appState.isMock, !appState.store.isDownloaded(appState.store.activeSpec) {
         HStack {
           Text("Download \(appState.store.activeSpec.displayName) to start chatting.")
             .font(.caption)
+            .accessibilityIdentifier("chat.banner.download")
           Spacer()
           Button("Models") { showLibrary = true }
             .buttonStyle(.borderedProminent)
@@ -97,7 +98,7 @@ struct ChatView: View {
     case .loading(let progress):
       HStack {
         ProgressView().controlSize(.small)
-        Text(progress).font(.caption)
+        Text(progress).font(.caption).accessibilityIdentifier("chat.banner.loading")
         Spacer()
       }
       .padding(DS.padMD)
@@ -108,7 +109,7 @@ struct ChatView: View {
       HStack {
         Image(systemName: "exclamationmark.triangle")
           .foregroundStyle(.red)
-        Text(message).font(.caption)
+        Text(message).font(.caption).accessibilityIdentifier("chat.banner.failed")
         Spacer()
         Button("Retry") { Task { await appState.ensureEngineLoaded() } }
           .buttonStyle(.bordered)
@@ -128,7 +129,7 @@ struct ChatView: View {
     if let error = appState.generationError {
       HStack {
         Image(systemName: "info.circle")
-        Text(error).font(.caption)
+        Text(error).font(.caption).accessibilityIdentifier("chat.banner.notice")
         Spacer()
         Button("Dismiss") { appState.generationError = nil }
           .buttonStyle(.bordered)
@@ -207,6 +208,7 @@ struct ChatView: View {
               .padding(.vertical, DS.padMD)
               .glassEffect(.regular.interactive(), in: .capsule)
             }
+            .accessibilityIdentifier("chat.suggestion")
           }
         }
       }
@@ -292,6 +294,7 @@ struct ChatView: View {
           .padding(.vertical, DS.padMD)
           .glassEffect(.regular, in: .rect(cornerRadius: DS.radiusCard))
           .focused($inputFocused)
+          .accessibilityIdentifier("chat.input")
           .disabled(appState.isGenerating)
         actionButton
       }
@@ -338,6 +341,7 @@ struct ChatView: View {
           .glassEffectID("action", in: inputNamespace)
       }
       .accessibilityLabel("Stop generating")
+      .accessibilityIdentifier("chat.stop")
     } else {
       Button(action: send) {
         Image(systemName: "arrow.up")
@@ -349,6 +353,7 @@ struct ChatView: View {
       .disabled(!canSend)
       .opacity(canSend ? 1 : 0.45)
       .accessibilityLabel("Send")
+      .accessibilityIdentifier("chat.send")
     }
   }
 
@@ -366,8 +371,16 @@ struct ChatView: View {
     inputFocused = false
     Haptics.send()
     Task {
-      await appState.send(text: text, imageData: image, audioFileURL: audioURL, in: thread)
-      recorder.discard()
+      let accepted = await appState.send(
+        text: text, imageData: image, audioFileURL: audioURL, in: thread)
+      if accepted {
+        recorder.discard()
+      } else {
+        // Nothing was sent: give the user their input back (the recording
+        // was never discarded).
+        if draft.isEmpty { draft = text }
+        if pendingImage == nil { pendingImage = image }
+      }
     }
   }
 }

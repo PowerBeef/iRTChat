@@ -1,0 +1,25 @@
+schemaVersion: 1
+
+# On-device inference can only be validated on a physical iPhone; the
+# simulator is kept for unit tests and the --mock-engine UI.
+enabledWorkflows: ["simulator", "device", "debugging"]
+
+# Default profile: build/run on the iPhone in Release (real performance).
+sessionDefaults:
+  projectPath: "./iRTChat.xcodeproj"
+  scheme: "iRTChat"
+  # iPhone de Patrice (iPhone 17 Pro, 8 GB)
+  deviceId: "<your-iphone-udid>"
+  # Debug builds of the LiteRT-LM path are misleadingly slow for inference.
+  configuration: "Release"
+
+sessionDefaultsProfiles:
+  # On-device test harness (iRTChatDeviceTests + iRTChatUITests). Tests need
+  # Debug: `@testable import` requires testability. The heavy inference runs
+  # in the prebuilt, optimized LiteRT-LM binary either way.
+  # Switch with session_use_defaults_profile({ profile: "device-tests" }).
+  device-tests:
+    projectPath: "./iRTChat.xcodeproj"
+    scheme: "iRTChat"
+    deviceId: "<your-iphone-udid>"
+    configuration: "Debug"

@@ -17,7 +17,7 @@ struct ContentView: View {
   }
 
   private var downloadBadge: Int {
-    appState.store.activeSpecDownloaded ? 0 : 1
+    appState.isMock || appState.store.activeSpecDownloaded ? 0 : 1
   }
 }
 

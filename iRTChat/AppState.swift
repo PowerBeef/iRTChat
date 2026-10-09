@@ -56,6 +56,16 @@ final class AppState {
 
   var modelContext: ModelContext?
 
+  /// Thread whose text history the native conversation currently holds.
+  @ObservationIgnored private var conversationThreadID: UUID?
+  /// True while the native conversation holds no turns (fresh load / empty reseed).
+  @ObservationIgnored private var conversationIsEmpty = true
+  /// Tail of the engine-lifecycle queue (see ``serialized(_:)``).
+  @ObservationIgnored private var lifecycleTail: Task<Void, Never>?
+  @ObservationIgnored private var applyOptionsTask: Task<Void, Never>?
+  /// Settings changed mid-reply; applied once the reply finishes.
+  @ObservationIgnored private var pendingOptionsApply = false
+
   private var memoryWarningObserver: NSObjectProtocol?
 
   init(useMockEngine: Bool = false, store: ModelStore? = nil) {
@@ -82,6 +92,7 @@ final class AppState {
       queue: .main
     ) { [weak self] _ in
       guard let self else { return }
+      Log.lifecycle.warning("memory warning (\(MemoryProbe.summary, privacy: .public))")
       Task { @MainActor in
         if self.isGenerating, await self.engine.currentModelID == .e4b {
           await self.engine.cancel()
@@ -102,26 +113,63 @@ final class AppState {
 
   // MARK: - Engine lifecycle
 
+  /// Run engine-lifecycle work (load, switch, options, benchmark, delete) one
+  /// at a time. The engine actor is reentrant across its long awaits, so
+  /// without this two loads could interleave and briefly hold two engines.
+  /// Never call from inside an operation that is already serialized.
+  private func serialized<T: Sendable>(
+    _ operation: @escaping @MainActor @Sendable () async -> T
+  ) async -> T {
+    let previous = lifecycleTail
+    let task = Task { @MainActor in
+      await previous?.value
+      return await operation()
+    }
+    lifecycleTail = Task { @MainActor in _ = await task.value }
+    return await task.value
+  }
+
   /// Load the active model if needed. Returns true when ready to generate.
   @discardableResult
   func ensureEngineLoaded() async -> Bool {
-    if case .ready = engineState, await engine.isLoaded,
-      await engine.currentModelID == store.activeModelID
-    {
-      return true
-    }
-    let spec = store.activeSpec
-    guard store.isDownloaded(spec), let url = store.localURL(for: spec) else {
-      engineState = .failed(message: "\(spec.displayName) is not downloaded.")
+    await serialized { await self.loadIfNeeded() }
+  }
+
+  private func isActiveModelLoaded() async -> Bool {
+    guard await engine.isLoaded, await engine.currentModelID == store.activeModelID else {
       return false
+    }
+    switch engineState {
+    case .ready, .generating: return true
+    case .idle, .loading, .failed: return false
+    }
+  }
+
+  private func loadIfNeeded() async -> Bool {
+    if await isActiveModelLoaded() { return true }
+    // Never tear down an engine that is mid-reply or benchmarking.
+    if isGenerating || isBenchmarking { return false }
+    let spec = store.activeSpec
+    let url: URL
+    if isMock {
+      // The scripted engine never reads the file.
+      url = store.localURL(for: spec) ?? FileManager.default.temporaryDirectory
+    } else {
+      guard store.isDownloaded(spec), let local = store.localURL(for: spec) else {
+        engineState = .failed(message: "\(spec.displayName) is not downloaded.")
+        return false
+      }
+      url = local
     }
     if spec.requiresRoomyDevice, !DeviceProfile.current.supportsE4B {
       engineState = .failed(
         message: "\(spec.displayName) needs an 8 GB-class iPhone. Using E2B is advised.")
-      // Still allow the attempt? No: fail fast with a clear message.
       return false
     }
     engineState = .loading(progress: "Loading \(spec.displayName)…")
+    // `load` replaces the native conversation with an empty one.
+    conversationThreadID = nil
+    conversationIsEmpty = true
     do {
       let plan = try await engine.load(
         spec: spec, modelURL: url, options: options,
@@ -138,28 +186,82 @@ final class AppState {
     }
   }
 
-  func switchModel(to id: ModelID) async {
+  private func unloadEngine() async {
     await engine.unload()
     resolved = nil
-    store.activeModelID = id
+    conversationThreadID = nil
+    conversationIsEmpty = true
     engineState = .idle
-    await ensureEngineLoaded()
   }
 
-  /// Apply option changes: cheap reseed when only conversation-level settings
-  /// changed, full reload for backend / KV-cache changes.
-  func applyOptions(_ newOptions: InferenceOptions, history: [(role: ChatRole, text: String)]) async {
-    options = newOptions
-    guard await engine.isLoaded else {
-      await ensureEngineLoaded()
+  func switchModel(to id: ModelID) async {
+    await serialized {
+      guard !self.isGenerating, !self.isBenchmarking else {
+        self.generationError = "Wait for the current reply to finish before switching models."
+        return
+      }
+      if self.store.activeModelID == id, await self.isActiveModelLoaded() { return }
+      await self.unloadEngine()
+      self.store.activeModelID = id
+      _ = await self.loadIfNeeded()
+    }
+  }
+
+  /// Delete a downloaded model, unloading it first if the engine holds it.
+  func deleteModel(_ spec: ModelSpec) async {
+    await serialized {
+      if await self.engine.currentModelID == spec.id {
+        guard !self.isGenerating, !self.isBenchmarking else {
+          self.generationError = "Wait for the current reply to finish before deleting the model."
+          return
+        }
+        await self.unloadEngine()
+      }
+      self.store.deleteModel(spec)
+    }
+  }
+
+  // MARK: - Options
+
+  /// Settings entry point: coalesces rapid edits (steppers, toggles, text)
+  /// into a single apply instead of one engine reload per tap.
+  func scheduleApplyOptions() {
+    applyOptionsTask?.cancel()
+    applyOptionsTask = Task {
+      try? await Task.sleep(for: .milliseconds(600))
+      guard !Task.isCancelled else { return }
+      await self.applyCurrentOptions()
+    }
+  }
+
+  /// Apply the current options: cheap reseed when only conversation-level
+  /// settings changed, full reload for backend / KV-cache changes.
+  func applyCurrentOptions() async {
+    await serialized { await self.applyOptionsLocked() }
+  }
+
+  private func applyOptionsLocked() async {
+    // Not loaded: options are picked up by the next load. Never load a
+    // multi-GB model just because a setting changed.
+    guard await engine.isLoaded else { return }
+    if isGenerating || isBenchmarking {
+      pendingOptionsApply = true
       return
     }
+    let newOptions = options
     if let live = engine as? LiteRTChatEngine {
       if await live.engineSettingsChanged(for: newOptions) {
-        await ensureEngineLoadedForceReload()
+        Log.engine.info("options: engine-level change, full reload")
+        await unloadEngine()
+        _ = await loadIfNeeded()
       } else {
+        let history = selectedThreadHistory()
+        Log.engine.info("options: conversation-level change, reseed \(history.count) turns")
         do {
-          resolved = try await live.updateConversationOptions(newOptions, history: history)
+          resolved = try await live.updateConversationOptions(
+            newOptions, enableTools: enableTools, history: history)
+          conversationThreadID = selectedThreadID
+          conversationIsEmpty = history.isEmpty
         } catch {
           generationError = (error as? ChatError)?.displayMessage ?? error.localizedDescription
         }
@@ -171,43 +273,106 @@ final class AppState {
     }
   }
 
-  private func ensureEngineLoadedForceReload() async {
-    await engine.unload()
-    engineState = .idle
-    await ensureEngineLoaded()
-  }
-
-  /// Apply the current options to the selected thread (Settings entry point).
-  func applyCurrentOptions() async {
-    await applyOptions(options, history: selectedThreadHistory())
-  }
-
   private func selectedThreadHistory() -> [(role: ChatRole, text: String)] {
     guard let context = modelContext, let id = selectedThreadID else { return [] }
-    let threads = (try? context.fetch(FetchDescriptor<ChatThread>())) ?? []
-    return threads.first(where: { $0.id == id })?.textHistory ?? []
+    let descriptor = FetchDescriptor<ChatThread>(predicate: #Predicate { $0.id == id })
+    return (try? context.fetch(descriptor))?.first?.textHistory ?? []
+  }
+
+  // MARK: - Threads ↔ native conversation
+
+  /// Make `thread` the conversation the native engine holds. Loads the model
+  /// when the thread uses the active model and replays the thread's text
+  /// history, so context never bleeds between chats (or is lost on relaunch).
+  @discardableResult
+  func activate(_ thread: ChatThread) async -> Bool {
+    selectedThreadID = thread.id
+    let threadID = thread.id
+    let modelID = thread.modelID
+    let history = thread.textHistory
+    return await serialized {
+      await self.prepareConversation(threadID: threadID, modelID: modelID, history: history)
+    }
+  }
+
+  private func prepareConversation(
+    threadID: UUID, modelID: ModelID, history: [(role: ChatRole, text: String)]
+  ) async -> Bool {
+    guard modelID == store.activeModelID else { return false }
+    guard await loadIfNeeded() else { return false }
+    if conversationThreadID == threadID { return true }
+    // Never swap the conversation out from under a live reply.
+    if isGenerating { return false }
+    if !(history.isEmpty && conversationIsEmpty) {
+      Log.engine.info("reseed for thread switch: \(history.count) turns")
+      do {
+        try await engine.reseed(history: history)
+      } catch {
+        generationError = (error as? ChatError)?.displayMessage ?? error.localizedDescription
+        return false
+      }
+    }
+    conversationThreadID = threadID
+    conversationIsEmpty = history.isEmpty
+    return true
   }
 
   // MARK: - Generation
 
-  func send(text: String, imageData: Data?, audioFileURL: URL?, in thread: ChatThread) async {
-    guard !isGenerating else { return }
-    guard let context = modelContext else { return }
+  /// Send a message in `thread`. Returns false when the message was not
+  /// accepted (nothing was persisted), so the caller can restore the draft.
+  @discardableResult
+  func send(text: String, imageData: Data?, audioFileURL: URL?, in thread: ChatThread) async
+    -> Bool
+  {
+    guard !isGenerating, !isBenchmarking else { return false }
+    guard let context = modelContext else { return false }
     generationError = nil
 
     let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !prompt.isEmpty || imageData != nil || audioFileURL != nil else { return }
+    guard !prompt.isEmpty || imageData != nil || audioFileURL != nil else { return false }
 
-    guard await ensureEngineLoaded() else { return }
+    guard thread.modelID == store.activeModelID else {
+      generationError =
+        "This chat uses \(ModelCatalog.spec(for: thread.modelID).displayName). Tap Switch to continue it."
+      return false
+    }
+    guard await activate(thread) else { return false }
 
     // The engine may have degraded to text-only (model without executors).
     if imageData != nil, resolved?.enableVision != true {
       generationError = "This session is text-only, so images are disabled."
-      return
+      return false
     }
     if audioFileURL != nil, resolved?.enableAudio != true {
       generationError = "This session is text-only, so voice messages are disabled."
-      return
+      return false
+    }
+
+    // Keep the KV cache from overflowing (native heap corruption → crash):
+    // trim the replayed history if this message + a reply wouldn't fit.
+    let history = thread.textHistory
+    let threadID = thread.id
+    let fit: Result<Bool, ChatError> = await serialized {
+      do {
+        return .success(
+          try await self.engine.fitContext(
+            text: prompt, imageData: imageData, audioFileURL: audioFileURL, history: history))
+      } catch {
+        return .failure(
+          error as? ChatError ?? .underlying(message: error.localizedDescription))
+      }
+    }
+    switch fit {
+    case .success(let trimmed):
+      if trimmed {
+        conversationThreadID = threadID
+        generationError =
+          "Older messages were dropped from the model's memory to fit its context window."
+      }
+    case .failure(let error):
+      generationError = error.displayMessage
+      return false
     }
 
     // Persist the user turn.
@@ -223,12 +388,23 @@ final class AppState {
 
     isGenerating = true
     engineState = .generating
-    defer {
-      isGenerating = false
-      engineState = .ready
-    }
+    conversationIsEmpty = false
 
     let stream = engine.send(text: prompt, imageData: imageData, audioFileURL: audioFileURL)
+    await consume(stream, into: reply, context: context)
+
+    isGenerating = false
+    engineState = .ready
+    if pendingOptionsApply {
+      pendingOptionsApply = false
+      await applyCurrentOptions()
+    }
+    return true
+  }
+
+  private func consume(
+    _ stream: AsyncThrowingStream<ChatEvent, Error>, into reply: ChatTurn, context: ModelContext
+  ) async {
     do {
       for try await event in stream {
         switch event {
@@ -249,12 +425,12 @@ final class AppState {
         if reply.text.isEmpty { context.delete(reply) }
         try? context.save()
       } else {
-        reply.text = reply.text.isEmpty ? "Error: \(error.displayMessage)" : reply.text
+        reply.text = reply.text.isEmpty ? ChatTurn.errorPrefix + error.displayMessage : reply.text
         try? context.save()
         Haptics.error()
       }
     } catch {
-      reply.text = reply.text.isEmpty ? "Error: \(error.localizedDescription)" : reply.text
+      reply.text = reply.text.isEmpty ? ChatTurn.errorPrefix + error.localizedDescription : reply.text
       try? context.save()
       Haptics.error()
     }
@@ -270,6 +446,10 @@ final class AppState {
   /// Unloads the chat engine first so the benchmark has full memory; the
   /// engine reloads lazily on the next chat.
   func runBenchmark() async {
+    await serialized { await self.runBenchmarkLocked() }
+  }
+
+  private func runBenchmarkLocked() async {
     guard !isBenchmarking, !isGenerating else { return }
     let spec = store.activeSpec
     guard store.isDownloaded(spec), let url = store.localURL(for: spec) else {
@@ -277,13 +457,12 @@ final class AppState {
       return
     }
     isBenchmarking = true
+    await unloadEngine()
     engineState = .loading(progress: "Benchmarking \(spec.displayName)…")
     defer {
       isBenchmarking = false
       engineState = .idle
     }
-    await engine.unload()
-    resolved = nil
     do {
       let useGPU = options.backendPreference == .gpu
       let cacheDir = try LiteRTChatEngine.cacheDirectory()
@@ -315,18 +494,20 @@ final class AppState {
     }
   }
 
+  // MARK: - Threads
+
   func newThread(in context: ModelContext) -> ChatThread {
     let thread = ChatThread(modelID: store.activeModelID)
     context.insert(thread)
     try? context.save()
-    selectedThreadID = thread.id
-    // Fresh native conversation (no history bleed between threads).
-    Task { try? await engine.reseed(history: []) }
+    // The native conversation is re-pointed when the chat is opened
+    // (``activate(_:)``), not here.
     return thread
   }
 
   func deleteThread(_ thread: ChatThread, in context: ModelContext) {
     if selectedThreadID == thread.id { selectedThreadID = nil }
+    if conversationThreadID == thread.id { conversationThreadID = nil }
     context.delete(thread)
     try? context.save()
   }

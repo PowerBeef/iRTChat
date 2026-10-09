@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The 2.6–3.7 GB model files are memory-mapped; without a larger
+	     address space, re-creating an engine can fail to map sections
+	     ("Cannot allocate memory") and LiteRT-LM silently loads a broken model. -->
+	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
+	<true/>
+	<!-- Default per-app memory limit measured on device: ~3.5 GB. -->
+	<key>com.apple.developer.kernel.increased-memory-limit</key>
+	<true/>
+</dict>
+</plist>

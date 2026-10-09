@@ -16,17 +16,13 @@ final class ModelStore: NSObject {
 
   private(set) var states: [ModelID: DownloadState] = [.e2b: .notDownloaded, .e4b: .notDownloaded]
 
+  /// Stored (not computed from UserDefaults) so observation tracking fires:
+  /// the Active badge, pickers, and banners must update when it changes.
   var activeModelID: ModelID {
-    get {
-      if let raw = UserDefaults.standard.string(forKey: "activeModelID"),
-        let id = ModelID(rawValue: raw)
-      {
-        return id
-      }
-      return .e2b
-    }
-    set { UserDefaults.standard.set(newValue.rawValue, forKey: "activeModelID") }
+    didSet { UserDefaults.standard.set(activeModelID.rawValue, forKey: Self.activeModelKey) }
   }
+
+  private static let activeModelKey = "activeModelID"
 
   var activeSpec: ModelSpec { ModelCatalog.spec(for: activeModelID) }
 
@@ -40,6 +36,9 @@ final class ModelStore: NSObject {
   private var resumeData: [ModelID: Data] = [:]
 
   override init() {
+    activeModelID =
+      UserDefaults.standard.string(forKey: Self.activeModelKey).flatMap(ModelID.init(rawValue:))
+      ?? .e2b
     super.init()
     let config = URLSessionConfiguration.default
     config.timeoutIntervalForRequest = 60

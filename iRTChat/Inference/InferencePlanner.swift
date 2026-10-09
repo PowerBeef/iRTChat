@@ -40,6 +40,140 @@ struct ModelCapabilities: Sendable, Equatable {
   )
 }
 
+/// KV-cache (context window) budgeting. Overflowing the cache corrupts
+/// LiteRT-LM's native heap and crashes the app, so every send must fit:
+/// tokens already in the cache + the new message + the reply cap <= window.
+///
+/// LiteRT-LM exposes no tokenizer, so pending input is estimated
+/// pessimistically from UTF-8 bytes; tokens already in the cache are measured.
+enum ContextBudget {
+  /// Bytes per token used for estimates. Gemma averages ~4+ bytes/token on
+  /// English; 3 leaves headroom for digits, code, and other scripts.
+  static let bytesPerToken = 3.0
+  /// System prompt + tool schemas + chat template, before any turn.
+  static let preambleTokens = 256
+  /// Per-turn template overhead (role markers, separators).
+  static let perTurnOverhead = 8
+  /// Never fill the window to the last token.
+  static let safetyMargin = 64
+  /// Smallest reply worth starting; below this the context is "full".
+  static let minReplyTokens = 96
+  /// Audio input token rate (conservative).
+  static let audioTokensPerSecond = 25.0
+
+  static func estimateTokens(_ text: String, calibration: Double = 1) -> Int {
+    let raw = (Double(text.utf8.count) / bytesPerToken * max(1, calibration)).rounded(.up)
+    return Int(raw) + perTurnOverhead
+  }
+
+  static func estimateInput(
+    text: String, imageTokens: Int?, audioSeconds: Double?, calibration: Double = 1
+  ) -> Int {
+    var total = estimateTokens(text, calibration: calibration)
+    if let imageTokens { total += imageTokens + perTurnOverhead }
+    if let audioSeconds { total += Int((audioSeconds * audioTokensPerSecond).rounded(.up)) }
+    return total
+  }
+
+  static func estimateHistory(
+    _ history: [(role: ChatRole, text: String)], calibration: Double = 1
+  ) -> Int {
+    history.reduce(0) { $0 + estimateTokens($1.text, calibration: calibration) }
+  }
+
+  /// Room kept free for the reply (thinking tokens count toward it).
+  static func replyReserve(maxNumTokens: Int, thinkingBudget: Int?) -> Int {
+    min(maxNumTokens / 3, 512 + (thinkingBudget ?? 0))
+  }
+
+  /// Whether `used` cached tokens + `input` + a reply reserve fit the window.
+  static func fits(used: Int, input: Int, maxNumTokens: Int, thinkingBudget: Int?) -> Bool {
+    used + input + replyReserve(maxNumTokens: maxNumTokens, thinkingBudget: thinkingBudget)
+      + safetyMargin <= maxNumTokens
+  }
+
+  /// Token budget for replayed history after trimming: leave room for the
+  /// preamble, the new message, and a reply, and use at most half the window
+  /// so the next turns don't immediately trim again.
+  static func historyBudget(maxNumTokens: Int, input: Int, thinkingBudget: Int?) -> Int {
+    let room =
+      maxNumTokens - preambleTokens - input
+      - replyReserve(maxNumTokens: maxNumTokens, thinkingBudget: thinkingBudget) - safetyMargin
+    return max(0, min(maxNumTokens / 2, room))
+  }
+
+  /// Smallest useful remnant of a truncated reply.
+  static let minTruncatedTokens = 48
+
+  /// The newest turns whose estimate fits `budget`, starting on a user turn.
+  /// When a reply is too long to keep whole, the exchange is kept with the
+  /// reply truncated, rather than losing the latest context entirely.
+  static func trimmedHistory(
+    _ history: [(role: ChatRole, text: String)], budget: Int, calibration: Double = 1
+  ) -> [(role: ChatRole, text: String)] {
+    var kept: [(role: ChatRole, text: String)] = []
+    var total = 0
+    var index = history.count - 1
+    while index >= 0 {
+      let turn = history[index]
+      let cost = estimateTokens(turn.text, calibration: calibration)
+      if total + cost <= budget {
+        kept.insert(turn, at: 0)
+        total += cost
+        index -= 1
+        continue
+      }
+      if turn.role == .model, index > 0, history[index - 1].role == .user {
+        let user = history[index - 1]
+        let userCost = estimateTokens(user.text, calibration: calibration)
+        // Room for the reply's text, minus its template overhead and the ellipsis.
+        let room = budget - total - userCost - perTurnOverhead - 2
+        if room >= minTruncatedTokens {
+          let maxBytes = Int(Double(room) * bytesPerToken / max(1, calibration))
+          kept.insert((.model, prefix(turn.text, maxBytes: maxBytes) + "…"), at: 0)
+          kept.insert(user, at: 0)
+        }
+      }
+      break
+    }
+    // The oldest kept turn may be a reply whose prompt didn't fit: shrink the
+    // reply to make room for its prompt rather than dropping the exchange.
+    if let first = kept.first, first.role == .model, index >= 0, history[index].role == .user {
+      let user = history[index]
+      let others = total - estimateTokens(first.text, calibration: calibration)
+      let room =
+        budget - others - estimateTokens(user.text, calibration: calibration)
+        - perTurnOverhead - 2
+      if room >= minTruncatedTokens {
+        let maxBytes = Int(Double(room) * bytesPerToken / max(1, calibration))
+        kept[0] = (.model, prefix(first.text, maxBytes: maxBytes) + "…")
+        kept.insert(user, at: 0)
+      }
+    }
+    while let first = kept.first, first.role != .user { kept.removeFirst() }
+    return kept
+  }
+
+  /// Longest prefix of `text` within `maxBytes` UTF-8 bytes (never splits a character).
+  static func prefix(_ text: String, maxBytes: Int) -> String {
+    var bytes = 0
+    var end = text.startIndex
+    for index in text.indices {
+      let size = text[index].utf8.count
+      if bytes + size > maxBytes { break }
+      bytes += size
+      end = text.index(after: index)
+    }
+    return String(text[..<end])
+  }
+
+  /// Largest safe reply length, or nil when not even ``minReplyTokens`` fit.
+  static func outputCap(maxNumTokens: Int, used: Int, input: Int) -> Int? {
+    let room = maxNumTokens - used - input - safetyMargin
+    return room >= minReplyTokens ? room : nil
+  }
+}
+
 enum InferencePlanner {
   static let minTokens = 256
   static let maxTokens = 8192
@@ -92,6 +226,36 @@ enum InferencePlanner {
     if caps.maxContextTokens > 0 {
       out.maxNumTokens = min(out.maxNumTokens, caps.maxContextTokens)
     }
+    return out
+  }
+
+  /// Whether moving from the plan an engine was built for (`built`, before
+  /// any fallback) to `requested` needs a new Engine. Backend, KV size,
+  /// vision/audio executors, and MTP are fixed at Engine creation.
+  static func requiresEngineReload(built: ResolvedInference, requested: ResolvedInference)
+    -> Bool
+  {
+    built.useGPU != requested.useGPU
+      || built.maxNumTokens != requested.maxNumTokens
+      || built.enableVision != requested.enableVision
+      || built.enableAudio != requested.enableAudio
+      || built.enableSpeculativeDecoding != requested.enableSpeculativeDecoding
+  }
+
+  /// Conversation-level settings from `plan` applied on top of the engine
+  /// actually running (`engine`, after fallbacks): never claims vision/audio
+  /// or a backend the engine doesn't have.
+  static func conversationUpdate(engine: ResolvedInference, plan: ResolvedInference)
+    -> ResolvedInference
+  {
+    var out = engine
+    out.thinkingBudget = plan.thinkingBudget
+    out.topK = plan.topK
+    out.topP = plan.topP
+    out.temperature = plan.temperature
+    out.maxOutputTokens = plan.maxOutputTokens
+    out.filterThoughtFromCache = plan.filterThoughtFromCache
+    out.visualTokenBudget = engine.enableVision ? plan.visualTokenBudget : nil
     return out
   }
 

@@ -1,6 +1,8 @@
 import UIKit
 
-/// Subtle haptics for key moments. Fire-and-forget; safe from any thread.
+/// Subtle haptics for key moments. Fire-and-forget; UIKit feedback
+/// generators are main-actor only.
+@MainActor
 enum Haptics {
   static func send() {
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import LiteRTLM
 
@@ -24,6 +25,14 @@ protocol ChatEngineProtocol: Sendable {
   var currentModelID: ModelID? { get async }
   /// Recreate the conversation, re-seeding text history (used after option changes).
   func reseed(history: [(role: ChatRole, text: String)]) async throws
+  /// Make room in the context window for the next message plus a reply,
+  /// replaying a trimmed `history` (the thread's turns before this message)
+  /// when needed. Returns true when older turns were dropped.
+  /// - Throws: ``ChatError/messageTooLong`` when the message alone can't fit.
+  func fitContext(
+    text: String, imageData: Data?, audioFileURL: URL?,
+    history: [(role: ChatRole, text: String)]
+  ) async throws -> Bool
   nonisolated func send(
     text: String, imageData: Data?, audioFileURL: URL?
   ) -> AsyncThrowingStream<ChatEvent, Error>
@@ -41,10 +50,43 @@ actor LiteRTChatEngine: ChatEngineProtocol {
   private var spec: ModelSpec?
   private var options: InferenceOptions?
   private var capabilities: ModelCapabilities?
+  /// The plan the current engine was built for, before backend/modality
+  /// fallbacks (engine-level settings are compared against this).
+  private var builtPlan: ResolvedInference?
   private var toolsEnabled = true
   private var generating = false
+  /// Human-readable trace of the most recent `load`: capabilities and every
+  /// attempt on the backend ladder with its outcome (read by the device harness).
+  private(set) var loadLog: [String] = []
+  /// Estimated tokens the conversation will prefill before its first send
+  /// (preamble + replayed history). `getTokenCount()` reads 0 until then.
+  private var pendingSeedTokens = ContextBudget.preambleTokens
+  /// Multiplier learned from the runtime's exact prefill counts, so byte
+  /// estimates track how this model actually tokenizes (never below 1).
+  private(set) var estimateCalibration = 1.0
 
   var isLoaded: Bool { engine != nil && conversation != nil }
+
+  /// Tokens currently held by the KV cache (measured once anything was sent).
+  private func usedTokens() -> Int {
+    let measured = (try? conversation?.getTokenCount()) ?? 0
+    return measured > 0 ? measured : pendingSeedTokens
+  }
+
+  private func estimateInput(text: String, imageData: Data?, audioFileURL: URL?) -> Int {
+    let imageTokens = imageData == nil ? nil : Int(resolved?.visualTokenBudget ?? 280)
+    let audioSeconds = audioFileURL.map(Self.audioDuration)
+    return ContextBudget.estimateInput(
+      text: text, imageTokens: imageTokens, audioSeconds: audioSeconds,
+      calibration: estimateCalibration)
+  }
+
+  private nonisolated static func audioDuration(_ url: URL) -> Double {
+    guard let file = try? AVAudioFile(forReading: url), file.fileFormat.sampleRate > 0 else {
+      return 30  // recorder maximum
+    }
+    return Double(file.length) / file.fileFormat.sampleRate
+  }
   var currentModelID: ModelID? { spec?.id }
 
   // MARK: Load
@@ -67,11 +109,17 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     // Introspect the model file (cheap, no engine needed) and intersect the
     // plan with real capabilities: MTP support, thinking, modalities, and
     // the model's context / visual-token limits.
+    loadLog = []
     if let caps = Self.inspect(modelURL: modelURL) {
       capabilities = caps
       plan = InferencePlanner.applyCapabilities(caps, to: plan)
+      loadLog.append(
+        "caps: mtp=\(caps.speculativeDecoding) thinking=\(caps.thinking) "
+          + "tools=\(caps.functionCalling) vision=\(caps.vision) audio=\(caps.audio) "
+          + "maxContext=\(caps.maxContextTokens) maxVisionBudget=\(caps.maxVisionTokenBudget)")
     } else {
       capabilities = nil
+      loadLog.append("caps: unavailable (ModelInfo failed)")
     }
 
     // Engine-level flags must be set before the engine is created. The
@@ -86,24 +134,50 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     let attempts = InferencePlanner.attempts(for: plan)
     var lastError: Error = ChatError.engineNotReady
     for attempt in attempts {
-      do {
-        let engine = try await Self.makeEngine(modelURL: modelURL, resolved: attempt)
-        let conversation = try await Self.makeConversation(
-          engine: engine, resolved: attempt, options: options, toolsEnabled: enableTools,
-          history: []
-        )
-        self.engine = engine
-        self.conversation = conversation
-        self.resolved = attempt
-        self.spec = spec
-        self.options = options
-        self.toolsEnabled = enableTools
-        return attempt
-      } catch {
-        lastError = error
+      let label = Self.describe(attempt)
+      for trial in 1...2 {
+        let started = Date()
+        do {
+          let engine = try await Self.makeEngine(modelURL: modelURL, resolved: attempt)
+          try await Self.validate(engine)
+          let conversation = try await Self.makeConversation(
+            engine: engine, resolved: attempt, options: options, toolsEnabled: enableTools,
+            history: []
+          )
+          self.engine = engine
+          self.conversation = conversation
+          self.pendingSeedTokens = ContextBudget.preambleTokens
+          self.resolved = attempt
+          self.builtPlan = plan
+          self.spec = spec
+          self.options = options
+          self.toolsEnabled = enableTools
+          let entry = String(
+            format: "ok %@ in %.1fs (%@)", label, Date().timeIntervalSince(started),
+            MemoryProbe.summary)
+          loadLog.append(entry)
+          Log.engine.info("load \(spec.id.rawValue, privacy: .public): \(entry, privacy: .public)")
+          return attempt
+        } catch {
+          lastError = error
+          let entry = "failed \(label) (try \(trial)): \(error)"
+          loadLog.append(entry)
+          Log.engine.error("load \(spec.id.rawValue, privacy: .public): \(entry, privacy: .public)")
+          // A broken-but-"successful" engine usually means a section failed
+          // to map while a previous engine's mappings were still alive: give
+          // them a moment to be released and retry the same configuration.
+          guard trial == 1, error is EngineValidationError else { break }
+          try? await Task.sleep(for: .milliseconds(750))
+        }
       }
     }
     throw lastError
+  }
+
+  private static func describe(_ attempt: ResolvedInference) -> String {
+    "\(attempt.backendLabel) vision=\(attempt.enableVision) audio=\(attempt.enableAudio) "
+      + "mtp=\(attempt.enableSpeculativeDecoding) kv=\(attempt.maxNumTokens) "
+      + "thinking=\(attempt.thinkingBudget.map(String.init) ?? "off")"
   }
 
   func unload() async {
@@ -114,6 +188,7 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     conversation = nil
     engine = nil // native handle is released in Engine.deinit
     resolved = nil
+    builtPlan = nil
     spec = nil
     options = nil
     generating = false
@@ -163,6 +238,25 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     return engine
   }
 
+  struct EngineValidationError: Error, CustomStringConvertible {
+    let underlying: String
+    var description: String { "engine failed validation: \(underlying)" }
+  }
+
+  /// LiteRT-LM can report a successful load even when part of the model
+  /// failed to map (e.g. "Cannot allocate memory" while another engine's
+  /// mappings are alive); every generation then fails ("No per-layer
+  /// embeddings found"). A one-token generation on a throwaway conversation
+  /// proves the engine actually works before the app commits to it.
+  private static func validate(_ engine: Engine) async throws {
+    let probe = try await engine.createConversation(with: ConversationConfig())
+    do {
+      _ = try await probe.sendMessage(LiteRTLM.Message("Hi"), maxOutputTokens: 1)
+    } catch {
+      throw EngineValidationError(underlying: String(describing: error))
+    }
+  }
+
   private static func makeConversation(
     engine: Engine, resolved: ResolvedInference, options: InferenceOptions,
     toolsEnabled: Bool, history: [(role: ChatRole, text: String)]
@@ -170,7 +264,7 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     let sampler = try SamplerConfig(
       topK: resolved.topK, topP: resolved.topP, temperature: resolved.temperature)
     let tools: [any Tool] = toolsEnabled ? [CurrentDateTimeTool(), CalculatorTool()] : []
-    let initial = history.suffix(20).map { turn -> LiteRTLM.Message in
+    let initial = history.suffix(maxReplayedTurns).map { turn -> LiteRTLM.Message in
       switch turn.role {
       case .user: return LiteRTLM.Message(turn.text, role: .user)
       case .model: return LiteRTLM.Message(turn.text, role: .model)
@@ -198,37 +292,100 @@ actor LiteRTChatEngine: ChatEngineProtocol {
       engine: engine, resolved: resolved, options: options, toolsEnabled: toolsEnabled,
       history: history
     )
+    pendingSeedTokens =
+      ContextBudget.preambleTokens
+      + ContextBudget.estimateHistory(
+        Array(history.suffix(Self.maxReplayedTurns)), calibration: estimateCalibration)
+  }
+
+  /// Learn how this model tokenizes from an exact KV-cache delta: grow the
+  /// multiplier immediately when estimates ran low, relax it slowly.
+  private func calibrate(text: String, measuredBefore: Int, outputTokens: Int?) {
+    // Short prompts are dominated by fixed template tokens (turn markers),
+    // which would inflate the per-byte ratio and over-trim history.
+    guard text.utf8.count >= Self.minCalibrationBytes, let outputTokens,
+      let measuredAfter = try? conversation?.getTokenCount()
+    else { return }
+    let actualInput = measuredAfter - measuredBefore - outputTokens
+    let raw = ContextBudget.estimateTokens(text)
+    guard actualInput > 0, raw > 0 else { return }
+    let ratio = Double(actualInput) / Double(raw)
+    let next = ratio > estimateCalibration ? ratio : 0.8 * estimateCalibration + 0.2 * ratio
+    estimateCalibration = min(3, max(1, next))
+    Log.engine.info(
+      "calibration: actual=\(actualInput) raw≈\(raw) ratio=\(ratio) → \(self.estimateCalibration)")
+  }
+
+  static let minCalibrationBytes = 400
+
+  /// Upper bound on replayed turns (see ``makeConversation``).
+  static let maxReplayedTurns = 20
+
+  // MARK: Context window
+
+  func fitContext(
+    text: String, imageData: Data?, audioFileURL: URL?,
+    history: [(role: ChatRole, text: String)]
+  ) async throws -> Bool {
+    guard conversation != nil, let resolved else { throw ChatError.engineNotReady }
+    let input = estimateInput(text: text, imageData: imageData, audioFileURL: audioFileURL)
+    let window = resolved.maxNumTokens
+    guard
+      ContextBudget.fits(
+        used: ContextBudget.preambleTokens, input: input, maxNumTokens: window,
+        thinkingBudget: resolved.thinkingBudget)
+    else {
+      throw ChatError.messageTooLong
+    }
+    let used = usedTokens()
+    if ContextBudget.fits(
+      used: used, input: input, maxNumTokens: window, thinkingBudget: resolved.thinkingBudget)
+    {
+      return false
+    }
+    let budget = ContextBudget.historyBudget(
+      maxNumTokens: window, input: input, thinkingBudget: resolved.thinkingBudget)
+    let trimmed = ContextBudget.trimmedHistory(
+      history, budget: budget, calibration: estimateCalibration)
+    Log.engine.info(
+      "context: used=\(used) input≈\(input) window=\(window) budget=\(budget) calibration=\(self.estimateCalibration); replaying \(trimmed.count)/\(history.count) turns"
+    )
+    try await reseed(history: trimmed)
+    return true
+  }
+
+  /// Plan for `options` on this model, intersected with the file's capabilities.
+  private func plan(for options: InferenceOptions, model: ModelID) -> ResolvedInference {
+    let plan = InferencePlanner.resolve(
+      options: options, model: model, memoryBytes: DeviceProfile.current.physicalMemoryBytes)
+    return capabilities.map { InferencePlanner.applyCapabilities($0, to: plan) } ?? plan
   }
 
   /// Whether engine-level settings changed (needs full `load`, not just reseed).
+  /// Compared with the plan the engine was built for (before fallbacks), so a
+  /// CPU or text-only fallback doesn't force a reload on every change.
   func engineSettingsChanged(for newOptions: InferenceOptions) async -> Bool {
-    guard let spec, let previous = resolved else { return true }
-    let plan = InferencePlanner.resolve(
-      options: newOptions, model: spec.id,
-      memoryBytes: DeviceProfile.current.physicalMemoryBytes)
-    return previous.useGPU != plan.useGPU || previous.maxNumTokens != plan.maxNumTokens
+    guard let spec, let builtPlan else { return true }
+    return InferencePlanner.requiresEngineReload(
+      built: builtPlan, requested: plan(for: newOptions, model: spec.id))
   }
 
-  /// Apply conversation-level options (sampler, thinking, tools, template)
-  /// by recreating the conversation. The caller must use `load` instead when
-  /// ``engineSettingsChanged(for:)`` is true.
+  /// Apply conversation-level options (sampler, thinking, tools, cache
+  /// compaction, visual budget) by recreating the conversation. The caller
+  /// must use `load` instead when ``engineSettingsChanged(for:)`` is true.
   func updateConversationOptions(
-    _ newOptions: InferenceOptions, history: [(role: ChatRole, text: String)]
+    _ newOptions: InferenceOptions, enableTools: Bool, history: [(role: ChatRole, text: String)]
   ) async throws -> ResolvedInference {
-    guard let spec else { throw ChatError.engineNotReady }
-    var plan = InferencePlanner.resolve(
-      options: newOptions, model: spec.id,
-      memoryBytes: DeviceProfile.current.physicalMemoryBytes)
-    if let capabilities {
-      plan = InferencePlanner.applyCapabilities(capabilities, to: plan)
-    }
+    guard let spec, let current = resolved else { throw ChatError.engineNotReady }
+    let updated = InferencePlanner.conversationUpdate(
+      engine: current, plan: plan(for: newOptions, model: spec.id))
     options = newOptions
-    resolved = plan
-    ExperimentalFlags.enableSpeculativeDecoding = plan.enableSpeculativeDecoding
+    resolved = updated
+    toolsEnabled = enableTools
     ExperimentalFlags.filterChannelContentFromKvCache =
-      plan.filterThoughtFromCache ? true : nil
+      updated.filterThoughtFromCache ? true : nil
     try await reseed(history: history)
-    return plan
+    return updated
   }
 
   // MARK: Send
@@ -273,8 +430,37 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     if let audioFileURL { contents.append(.audioFile(audioFileURL.path)) }
     let message = LiteRTLM.Message(contents: contents)
 
+    // Hard guarantee against KV-cache overflow (which corrupts the native
+    // heap): cap the reply to the room actually left. An automatic tool round
+    // adds a tool response and a second reply under the same cap, so split
+    // the room when tools are on.
+    let measuredBefore = (try? conversation.getTokenCount()) ?? 0
+    let usedBefore = usedTokens()
+    let inputEstimate = estimateInput(
+      text: text, imageData: imageData, audioFileURL: audioFileURL)
+    guard
+      var cap = ContextBudget.outputCap(
+        maxNumTokens: resolved.maxNumTokens, used: usedBefore, input: inputEstimate)
+    else {
+      Log.generation.error(
+        "context full: used=\(usedBefore) input≈\(inputEstimate) window=\(resolved.maxNumTokens)")
+      continuation.finish(throwing: ChatError.contextFull)
+      return
+    }
+    if toolsEnabled { cap /= 2 }
+    let maxOutputTokens = min(resolved.maxOutputTokens ?? cap, cap)
+
     let started = Date()
     var firstChunkAt: Date?
+    // Tool calls run inside LiteRT-LM and never appear in streamed chunks;
+    // report the tools that actually ran so the reply can show its chips.
+    let toolCursor = ToolActivity.cursor
+    var reportedTools = 0
+    func newToolNames() -> [String] {
+      let invoked = ToolActivity.invocations(since: toolCursor)
+      defer { reportedTools = invoked.count }
+      return Array(invoked.dropFirst(reportedTools))
+    }
 
     func stats(started: Date, firstChunkAt: Date?) -> GenerationStats {
       // Prefer exact runtime measurements; fall back to client-side timing.
@@ -303,8 +489,7 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     }
 
     do {
-      let stream = conversation.sendMessageStream(
-        message, maxOutputTokens: resolved.maxOutputTokens)
+      let stream = conversation.sendMessageStream(message, maxOutputTokens: maxOutputTokens)
       for try await chunk in stream {
         if Task.isCancelled {
           try? conversation.cancel()
@@ -317,15 +502,28 @@ actor LiteRTChatEngine: ChatEngineProtocol {
             ChatChunk(
               textDelta: chunk.toString,
               thoughtDelta: chunk.channels["thought"],
-              toolNames: chunk.toolCalls.map(\.name)
+              toolNames: chunk.toolCalls.map(\.name) + newToolNames()
             )))
       }
-      continuation.yield(.finished(stats(started: started, firstChunkAt: firstChunkAt)))
+      let lateTools = newToolNames()
+      if !lateTools.isEmpty {
+        continuation.yield(.chunk(ChatChunk(textDelta: "", thoughtDelta: nil, toolNames: lateTools)))
+      }
+      let final = stats(started: started, firstChunkAt: firstChunkAt)
+      if imageData == nil, audioFileURL == nil, measuredBefore > 0 {
+        calibrate(text: text, measuredBefore: measuredBefore, outputTokens: final.outputTokens)
+      }
+      Log.generation.info(
+        "finished: \(final.footerLine, privacy: .public), out=\(final.outputTokens ?? -1) cap=\(maxOutputTokens) kv=\(self.usedTokens())/\(resolved.maxNumTokens)"
+      )
+      continuation.yield(.finished(final))
       continuation.finish()
     } catch is CancellationError {
+      Log.generation.info("cancelled (task)")
       try? conversation.cancel()
       continuation.finish(throwing: ChatError.generationCancelled)
     } catch {
+      Log.generation.error("stream error: \(String(describing: error), privacy: .public)")
       if let chatError = error as? ChatError {
         continuation.finish(throwing: chatError)
       } else {
@@ -336,6 +534,7 @@ actor LiteRTChatEngine: ChatEngineProtocol {
   }
 
   func cancel() async {
+    Log.generation.info("cancel requested (generating=\(self.generating))")
     try? conversation?.cancel()
   }
 }
@@ -348,6 +547,13 @@ actor MockChatEngine: ChatEngineProtocol {
   var stats: GenerationStats
   private(set) var loadedModel: ModelID?
   var loadResult: ResolvedInference
+  /// Test instrumentation: how often `load` ran and every reseeded history.
+  private(set) var loadCount = 0
+  private(set) var reseedLog: [[String]] = []
+  /// Simulated load latency (exposes overlapping-load races in tests).
+  var loadDelay: Duration = .zero
+
+  func setLoadDelay(_ delay: Duration) { loadDelay = delay }
 
   init(
     script: [ChatChunk] = [
@@ -369,6 +575,9 @@ actor MockChatEngine: ChatEngineProtocol {
     spec: ModelSpec, modelURL: URL, options: InferenceOptions, memoryBytes: UInt64,
     enableTools: Bool
   ) async throws -> ResolvedInference {
+    loadCount += 1
+    loadedModel = nil
+    if loadDelay > .zero { try? await Task.sleep(for: loadDelay) }
     loadedModel = spec.id
     loadResult = InferencePlanner.resolve(options: options, model: spec.id, memoryBytes: memoryBytes)
     return loadResult
@@ -378,7 +587,22 @@ actor MockChatEngine: ChatEngineProtocol {
   var isLoaded: Bool { loadedModel != nil }
   var currentModelID: ModelID? { loadedModel }
 
-  func reseed(history: [(role: ChatRole, text: String)]) async throws {}
+  func reseed(history: [(role: ChatRole, text: String)]) async throws {
+    reseedLog.append(history.map(\.text))
+  }
+
+  /// Scripted `fitContext` outcome (tests): `.success(true)` = trimmed.
+  private(set) var fitResult: Result<Bool, ChatError> = .success(false)
+  private(set) var fitCalls = 0
+  func setFitResult(_ result: Result<Bool, ChatError>) { fitResult = result }
+
+  func fitContext(
+    text: String, imageData: Data?, audioFileURL: URL?,
+    history: [(role: ChatRole, text: String)]
+  ) async throws -> Bool {
+    fitCalls += 1
+    return try fitResult.get()
+  }
 
   nonisolated func send(
     text: String, imageData: Data?, audioFileURL: URL?

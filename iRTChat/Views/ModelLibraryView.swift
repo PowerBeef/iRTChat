@@ -51,6 +51,7 @@ private struct ModelCardView: View {
         if isActive {
           Text("Active")
             .font(.caption2).bold()
+            .accessibilityIdentifier("models.active.\(spec.id.rawValue)")
             .padding(.horizontal, 10)
             .padding(.vertical, DS.spaceXS)
             .glassEffect(.regular.tint(.accentColor), in: .capsule)
@@ -80,6 +81,7 @@ private struct ModelCardView: View {
       Button("Download") { appState.store.startDownload(spec) }
         .buttonStyle(.glassProminent)
         .controlSize(.regular)
+        .accessibilityIdentifier("models.download.\(spec.id.rawValue)")
     case .downloading(let progress):
       VStack(alignment: .leading, spacing: 8) {
         ProgressView(value: progress) {
@@ -117,9 +119,10 @@ private struct ModelCardView: View {
           }
           .buttonStyle(.glassProminent)
           .controlSize(.small)
+          .accessibilityIdentifier("models.use.\(spec.id.rawValue)")
         }
         Spacer()
-        Button("Delete", role: .destructive) { appState.store.deleteModel(spec) }
+        Button("Delete", role: .destructive) { Task { await appState.deleteModel(spec) } }
           .buttonStyle(.glass)
           .controlSize(.small)
       }

@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct iRTChatApp: App {
   @State private var appState: AppState
+  @Environment(\.scenePhase) private var scenePhase
   let container: ModelContainer
 
   init() {
@@ -21,8 +22,21 @@ struct iRTChatApp: App {
       fatalError("Could not create ModelContainer: \(error)")
     }
 
+    // `--uitest-reset`: start UI tests from a clean slate (no chats, default
+    // settings). Downloaded models are kept.
+    if args.contains("--uitest-reset") {
+      try? container.mainContext.delete(model: ChatTurn.self)
+      try? container.mainContext.delete(model: ChatThread.self)
+      try? container.mainContext.save()
+      for key in ["inferenceOptions", "enableTools", "selectedThreadID", "activeModelID"] {
+        UserDefaults.standard.removeObject(forKey: key)
+      }
+    }
+
     let state = AppState(useMockEngine: useMock)
-    state.modelContext = ModelContext(container)
+    // Must be the same context the views use (`.modelContainer` injects
+    // mainContext): turns are appended to view-owned threads, then saved here.
+    state.modelContext = container.mainContext
     _appState = State(initialValue: state)
   }
 
@@ -32,5 +46,10 @@ struct iRTChatApp: App {
         .environment(appState)
     }
     .modelContainer(container)
+    .onChange(of: scenePhase) { _, phase in
+      Log.lifecycle.info(
+        "scenePhase=\(String(describing: phase), privacy: .public) generating=\(appState.isGenerating)"
+      )
+    }
   }
 }
