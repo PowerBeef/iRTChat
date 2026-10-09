@@ -654,6 +654,21 @@ final class AppState {
     return thread
   }
 
+  /// Delete saved chats without messages (left behind when a first message
+  /// was rejected), except the open one.
+  func pruneEmptyThreads() {
+    guard let context = modelContext,
+      let threads = try? context.fetch(FetchDescriptor<ChatThread>())
+    else { return }
+    let empty = threads.filter { $0.turns.isEmpty && $0.id != selectedThreadID }
+    guard !empty.isEmpty else { return }
+    for thread in empty {
+      if conversationThreadID == thread.id { conversationThreadID = nil }
+      context.delete(thread)
+    }
+    try? context.save()
+  }
+
   func deleteThread(_ thread: ChatThread, in context: ModelContext) {
     if selectedThreadID == thread.id { selectedThreadID = nil }
     if conversationThreadID == thread.id { conversationThreadID = nil }

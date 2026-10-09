@@ -1,9 +1,13 @@
 import PhotosUI
+import SwiftData
 import SwiftUI
 
+/// A conversation, or a new chat (`thread == nil`) that is saved when its
+/// first message is sent.
 struct ChatView: View {
   @Environment(AppState.self) private var appState
-  let thread: ChatThread
+  @Environment(\.modelContext) private var context
+  let thread: ChatThread?
 
   @State private var draft = ""
   @State private var pendingImage: Data?
@@ -18,7 +22,7 @@ struct ChatView: View {
 
   var body: some View {
     // Computed once per render (not per use: this re-renders while streaming).
-    let turns = thread.orderedTurns
+    let turns = thread?.orderedTurns ?? []
     let versions = versionGroups()
     VStack(spacing: 0) {
       engineBanner
@@ -29,9 +33,18 @@ struct ChatView: View {
       inputBar
     }
     .background(ambientBackground)
-    .navigationTitle(thread.title)
+    .navigationTitle(thread?.title ?? "iRTChat")
     .navigationBarTitleDisplayMode(.inline)
-    .navigationDestination(isPresented: $showLibrary) { ModelLibraryView() }
+    .sheet(isPresented: $showLibrary) {
+      NavigationStack {
+        ModelLibraryView()
+          .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+              Button("Done") { showLibrary = false }
+            }
+          }
+      }
+    }
     .alert(
       "Microphone access denied",
       isPresented: $recorder.permissionDenied
@@ -43,8 +56,21 @@ struct ChatView: View {
     .onChange(of: recorder.errorMessage) { _, message in
       if let message { appState.generationError = "Recording failed: \(message)" }
     }
-    .task(id: thread.id) {
-      await appState.activate(thread)
+    .task(id: thread?.id) {
+      if let thread {
+        await appState.activate(thread)
+      } else if appState.isMock || appState.store.activeSpecDownloaded {
+        // Warm the model up while the first message is typed.
+        await appState.ensureEngineLoaded()
+      }
+    }
+    .onChange(of: thread?.id) { old, _ in
+      // Switching chats (not saving a new one) starts with a clean composer.
+      guard old != nil else { return }
+      reader.stop()
+      editingTurn = nil
+      draft = ""
+      pendingImage = nil
     }
     .onDisappear { reader.stop() }
   }
@@ -170,7 +196,7 @@ struct ChatView: View {
         .font(.title2)
         .frame(width: DS.heroMark, height: DS.heroMark)
         .glassEffect(.regular.tint(.accentColor), in: .circle)
-      Text("Chat with \(ModelCatalog.spec(for: thread.modelID).displayName)")
+      Text("Chat with \(appState.store.activeSpec.displayName)")
         .font(.title3)
         .bold()
         .multilineTextAlignment(.center)
@@ -225,14 +251,15 @@ struct ChatView: View {
   /// where there is more than one.
   private func versionGroups() -> [VersionKey: [ChatTurn]] {
     // Unlinked (legacy, never migrated) threads have no parents to group by.
-    guard thread.activeLeafID != nil else { return [:] }
+    guard let thread, thread.activeLeafID != nil else { return [:] }
     return Dictionary(grouping: thread.turns, by: VersionKey.init)
       .filter { $0.value.count > 1 }
       .mapValues { $0.sorted { $0.createdAt < $1.createdAt } }
   }
 
   private func actions(for turn: ChatTurn) -> MessageActions {
-    MessageActions(
+    guard let thread else { return MessageActions() }
+    return MessageActions(
       isBusy: appState.isGenerating,
       isSpeaking: reader.speakingID == turn.id,
       canRegenerate: !turn.isUser && appState.canRegenerate(turn, in: thread),
@@ -287,7 +314,7 @@ struct ChatView: View {
   }
 
   private func isLiveBubble(_ turn: ChatTurn, in turns: [ChatTurn]) -> Bool {
-    appState.generatingThreadID == thread.id && turn.id == turns.last?.id && !turn.isUser
+    appState.generatingThreadID == thread?.id && turn.id == turns.last?.id && !turn.isUser
   }
 
   // MARK: - Pending attachments
@@ -422,7 +449,7 @@ struct ChatView: View {
 
   private func send() {
     reader.stop()
-    if let editingTurn {
+    if let editingTurn, let thread {
       let text = draft
       draft = ""
       self.editingTurn = nil
@@ -444,9 +471,10 @@ struct ChatView: View {
     pendingImage = nil
     inputFocused = false
     Haptics.send()
+    let target = thread ?? appState.newThread(in: context)
     Task {
       let accepted = await appState.send(
-        text: text, imageData: image, audioFileURL: audioURL, in: thread)
+        text: text, imageData: image, audioFileURL: audioURL, in: target)
       if accepted {
         recorder.discard()
       } else {

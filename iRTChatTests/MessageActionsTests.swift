@@ -109,3 +109,17 @@ final class MessageActionsTests: XCTestCase {
     XCTAssertEqual(thread.orderedTurns.first?.imageData, image)
   }
 }
+
+extension MessageActionsTests {
+  func testEmptyChatsArePrunedExceptTheOpenOne() async {
+    let kept = appState.newThread(in: context)
+    let open = appState.newThread(in: context)
+    let used = appState.newThread(in: context)
+    await appState.send(text: "Hi", imageData: nil, audioFileURL: nil, in: used)
+    appState.selectedThreadID = open.id
+    appState.pruneEmptyThreads()
+    let ids = Set(((try? context.fetch(FetchDescriptor<ChatThread>())) ?? []).map(\.id))
+    XCTAssertEqual(ids, [open.id, used.id])
+    _ = kept
+  }
+}

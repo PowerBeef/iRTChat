@@ -86,8 +86,9 @@ final class ChatFlowUITests: XCTestCase {
     try openNewChat()
     send("Write a detailed 600-word story about a lighthouse keeper.")
     try waitForStreamingText(minLength: 40)
-    app.navigationBars.buttons.element(boundBy: 0).tap()
-    element("threads.row").firstMatch.tap()
+    element("chat.new").tap()
+    openDrawer()
+    element("drawer.row").firstMatch.tap()
     XCTAssertFalse(
       element("chat.banner.loading").waitForExistence(timeout: 2),
       "Engine reloaded when reopening the chat mid-reply")
@@ -103,7 +104,7 @@ final class ChatFlowUITests: XCTestCase {
     try openNewChat()
     send("Say 'one'.")
     try waitForReplyToFinish(timeout: 120)
-    app.tabBars.buttons["Settings"].tap()
+    openSettings()
     // Settings is a lazily loaded Form: scroll the sampler presets into view.
     let precise = app.buttons["Precise"].firstMatch
     for _ in 0..<8 where !precise.isHittable {
@@ -117,26 +118,63 @@ final class ChatFlowUITests: XCTestCase {
     }
     XCTAssertTrue(element("settings.status").waitForExistence(timeout: 5))
     attachScreenshot("settings")
-    app.tabBars.buttons["Chat"].tap()
+    element("settings.done").tap()
+    // Settings opens from the drawer, which is still showing behind it.
+    element("drawer.close").tap()
     send("Say 'two'.")
     try waitForReplyToFinish(timeout: 120)
     XCTAssertFalse(lastModelText().hasPrefix("Error:"), lastModelText())
   }
 
-  /// Creating a chat (toolbar or empty-state button) opens it immediately,
-  /// and going back shows it in the list.
-  func testNewChatOpensDirectly() throws {
-    app.tabBars.buttons["Chat"].tap()
-    element("threads.empty.new").tap()
-    XCTAssertTrue(element("chat.input").waitForExistence(timeout: 5), "Empty-state button")
-    app.navigationBars.buttons.element(boundBy: 0).tap()
-    XCTAssertTrue(element("threads.row").waitForExistence(timeout: 5))
+  /// The app opens on a new chat; a chat is saved on its first message
+  /// (unused new chats never appear in the drawer) and reopens from it.
+  func testDrawerNewChatAndReopen() throws {
+    try openNewChat()
+    send("Say 'one'.")
+    try waitForReplyToFinish(timeout: 120)
 
-    element("threads.new").tap()
-    XCTAssertTrue(element("chat.input").waitForExistence(timeout: 5), "Toolbar button")
-    app.navigationBars.buttons.element(boundBy: 0).tap()
-    XCTAssertEqual(
-      app.descendants(matching: .any).matching(identifier: "threads.row").count, 2)
+    element("chat.new").tap()
+    XCTAssertTrue(element("chat.suggestion").waitForExistence(timeout: 5), "New chat not empty")
+    openDrawer()
+    XCTAssertEqual(rows().count, 1, "Unused new chat was saved")
+    attachScreenshot("drawer")
+
+    rows().firstMatch.tap()
+    XCTAssertTrue(element("message.model").waitForExistence(timeout: 5), "Chat did not reopen")
+    XCTAssertFalse(element("drawer.search").isHittable, "Drawer stayed open")
+
+    // Search finds the chat by message text; a miss shows no rows.
+    openDrawer()
+    let search = element("drawer.search")
+    search.tap()
+    search.typeText("one")
+    XCTAssertEqual(rows().count, 1)
+    search.typeText("zzz")
+    XCTAssertEqual(rows().count, 0)
+  }
+
+  /// Rename and delete from the chat's toolbar menu.
+  func testRenameAndDeleteChat() throws {
+    try openNewChat()
+    send("Say 'hello'.")
+    try waitForReplyToFinish(timeout: 120)
+    // Wait for the model-written title so it can't overwrite the rename.
+    sleep(Self.isSimulator ? 1 : 5)
+
+    element("chat.menu").tap()
+    app.buttons["Rename"].tap()
+    let field = app.alerts.textFields.firstMatch
+    XCTAssertTrue(field.waitForExistence(timeout: 5))
+    field.clearAndType("Greetings")
+    app.alerts.buttons["Save"].tap()
+    XCTAssertTrue(app.navigationBars["Greetings"].waitForExistence(timeout: 5))
+
+    element("chat.menu").tap()
+    app.buttons["Delete"].tap()
+    app.buttons["Delete"].firstMatch.tap()
+    XCTAssertTrue(element("chat.suggestion").waitForExistence(timeout: 5))
+    openDrawer()
+    XCTAssertEqual(rows().count, 0)
   }
 
   /// Rich replies: code block (with Copy), table and display math render.
@@ -187,9 +225,11 @@ final class ChatFlowUITests: XCTestCase {
     XCTAssertFalse(element("chat.editing").exists)
   }
 
-  /// E4B is the only model: its card shows Ready (device) or Download.
-  func testModelsTabShowsTheModel() throws {
-    app.tabBars.buttons["Models"].tap()
+  /// E4B is the only model: its card (Settings → Models) shows Ready
+  /// (device) or Download.
+  func testModelsShowTheModel() throws {
+    openSettings()
+    element("settings.models").tap()
     let ready = element("models.ready.e4b")
     let download = element("models.download.e4b")
     XCTAssertTrue(
@@ -207,11 +247,27 @@ final class ChatFlowUITests: XCTestCase {
   }
 
   private func openNewChat() throws {
-    app.tabBars.buttons["Chat"].tap()
-    element("threads.new").tap()
-    XCTAssertTrue(
-      element("chat.input").waitForExistence(timeout: 5), "New chat did not open directly")
+    // The app launches on a new chat (`--uitest-reset` clears the selection).
+    XCTAssertTrue(element("chat.input").waitForExistence(timeout: 10), "New chat not shown")
     try waitForEngineReady()
+  }
+
+  private func openDrawer() {
+    element("chat.drawer").tap()
+    XCTAssertTrue(element("drawer.search").waitForExistence(timeout: 5), "Drawer did not open")
+    // Let the slide-in animation settle before tapping rows.
+    _ = element("drawer.close").waitForExistence(timeout: 2)
+    usleep(400_000)
+  }
+
+  private func openSettings() {
+    openDrawer()
+    element("drawer.settings").tap()
+    XCTAssertTrue(element("settings.done").waitForExistence(timeout: 5), "Settings did not open")
+  }
+
+  private func rows() -> XCUIElementQuery {
+    app.descendants(matching: .any).matching(identifier: "drawer.row")
   }
 
   private func waitForEngineReady(timeout: TimeInterval = 180) throws {
@@ -230,6 +286,11 @@ final class ChatFlowUITests: XCTestCase {
   private func send(_ text: String) {
     let input = element("chat.input")
     input.tap()
+    let keyboard = app.keyboards.firstMatch
+    if keyboard.waitForExistence(timeout: 2) {
+      XCTAssertLessThanOrEqual(
+        input.frame.maxY, keyboard.frame.minY + 1, "The keyboard covers the message field")
+    }
     input.typeText(text)
     element("chat.send").tap()
   }
@@ -260,5 +321,15 @@ final class ChatFlowUITests: XCTestCase {
     attachment.name = name
     attachment.lifetime = .keepAlways
     add(attachment)
+  }
+}
+
+extension XCUIElement {
+  func clearAndType(_ text: String) {
+    tap()
+    if let current = value as? String, !current.isEmpty {
+      typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+    }
+    typeText(text)
   }
 }

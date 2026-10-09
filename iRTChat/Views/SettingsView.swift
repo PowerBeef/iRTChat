@@ -5,6 +5,7 @@ import SwiftUI
 /// live (via `onChange`); the system prompt applies through its button.
 struct SettingsView: View {
   @Environment(AppState.self) private var appState
+  @Environment(\.dismiss) private var dismiss
   @State private var systemDraft = ""
   @State private var draftLoaded = false
 
@@ -25,6 +26,13 @@ struct SettingsView: View {
         deviceSection
       }
       .navigationTitle("Settings")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") { dismiss() }
+            .accessibilityIdentifier("settings.done")
+        }
+      }
       .onAppear {
         if !draftLoaded {
           systemDraft = appState.options.systemPrompt
@@ -75,11 +83,11 @@ struct SettingsView: View {
       return "Ready"
     case .generating: return "Generating…"
     case .loading(let progress): return progress
-    case .failed: return "Engine error — see Chats for details"
+    case .failed: return "Engine error — see the chat for details"
     case .idle:
       return appState.store.isDownloaded(appState.store.activeSpec)
         ? "Downloaded — loads on your next chat"
-        : "Not downloaded — get it in Models"
+        : "Not downloaded — get it in Models below"
     }
   }
 
@@ -97,14 +105,19 @@ struct SettingsView: View {
 
   private var modelSection: some View {
     Section {
-      LabeledContent("Model", value: activeSpec.displayName)
+      NavigationLink {
+        ModelLibraryView()
+      } label: {
+        LabeledContent("Models", value: activeSpec.displayName)
+      }
+      .accessibilityIdentifier("settings.models")
     } header: {
       Label("Model", systemImage: "cube")
     } footer: {
       if let resolved = appState.resolved {
         Text(resolvedSummary(resolved)).monospacedDigit()
       } else {
-        Text("Download the model in the Models tab to start chatting.")
+        Text("Download the model in Models to start chatting.")
       }
     }
   }

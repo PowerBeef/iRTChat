@@ -1,23 +1,201 @@
+import SwiftData
 import SwiftUI
 
+/// One chat screen with a side drawer (chats, search, settings). The chat
+/// slides aside to reveal the drawer: tap the menu button or swipe from the
+/// left edge; tap or swipe the chat back to close.
 struct ContentView: View {
   @Environment(AppState.self) private var appState
+  @Environment(\.modelContext) private var context
+  @Query(sort: \ChatThread.updatedAt, order: .reverse) private var threads: [ChatThread]
 
-  var body: some View {
-    TabView {
-      ThreadListView()
-        .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
-      NavigationStack { ModelLibraryView() }
-        .tabItem { Label("Models", systemImage: "internaldrive") }
-        .badge(downloadBadge)
-      SettingsView()
-        .tabItem { Label("Settings", systemImage: "gearshape") }
-    }
-    .tabBarMinimizeBehavior(.onScrollDown)
+  @State private var drawerOpen = false
+  /// Live finger offset while dragging the drawer (relative to its resting place).
+  @State private var dragOffset: CGFloat = 0
+  @State private var dragging = false
+  @State private var showSettings = false
+  @State private var renaming: ChatThread?
+  @State private var renameText = ""
+  @State private var deleting: ChatThread?
+
+  private var currentThread: ChatThread? {
+    guard let id = appState.selectedThreadID else { return nil }
+    return threads.first { $0.id == id }
   }
 
-  private var downloadBadge: Int {
-    appState.isMock || appState.store.activeSpecDownloaded ? 0 : 1
+  var body: some View {
+    GeometryReader { geometry in
+      let width = min(geometry.size.width * 0.84, 360)
+      let offset = min(max((drawerOpen ? width : 0) + dragOffset, 0), width)
+      let progress = offset / width
+      ZStack(alignment: .leading) {
+        if progress > 0 {
+          drawer
+            .frame(width: width)
+            .background(Color(.secondarySystemBackground).ignoresSafeArea())
+            .accessibilityHidden(!drawerOpen)
+        }
+        // The chat lays out in the safe area; its card and dimming extend
+        // edge to edge so it slides aside as one panel.
+        chat
+          .background {
+            RoundedRectangle(cornerRadius: progress > 0 ? 44 : 0)
+              .fill(Color(.systemBackground))
+              .shadow(color: .black.opacity(0.12 * progress), radius: 12)
+              .ignoresSafeArea()
+          }
+          .overlay {
+            if progress > 0 {
+              RoundedRectangle(cornerRadius: 44)
+                .fill(Color.black.opacity(0.12 * progress))
+                .ignoresSafeArea()
+                .contentShape(.rect)
+                .onTapGesture { setDrawer(open: false) }
+                .accessibilityLabel("Close menu")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("drawer.close")
+            }
+          }
+          .offset(x: offset)
+          .accessibilityHidden(drawerOpen)
+      }
+      .simultaneousGesture(drawerDrag(width: width))
+    }
+    .task { appState.pruneEmptyThreads() }
+    .onChange(of: appState.selectedThreadID) { appState.pruneEmptyThreads() }
+    .sheet(isPresented: $showSettings) {
+      SettingsView()
+    }
+    .alert("Rename chat", isPresented: isRenaming) {
+      TextField("Title", text: $renameText)
+        .accessibilityIdentifier("rename.field")
+      Button("Save") { commitRename() }
+      Button("Cancel", role: .cancel) {}
+    }
+    .confirmationDialog(
+      "Delete this chat?", isPresented: isDeleting, titleVisibility: .visible,
+      presenting: deleting
+    ) { thread in
+      Button("Delete", role: .destructive) {
+        appState.deleteThread(thread, in: context)
+      }
+    } message: { _ in
+      Text("It will be removed from this iPhone.")
+    }
+  }
+
+  // MARK: - Chat
+
+  private var chat: some View {
+    NavigationStack {
+      ChatView(thread: currentThread)
+        .toolbar {
+          ToolbarItem(placement: .topBarLeading) {
+            Button {
+              setDrawer(open: true)
+            } label: {
+              Image(systemName: "line.3.horizontal")
+            }
+            .accessibilityLabel("Chats")
+            .accessibilityIdentifier("chat.drawer")
+          }
+          ToolbarItem(placement: .topBarTrailing) {
+            Button(action: newChat) {
+              Image(systemName: "square.and.pencil")
+            }
+            .accessibilityLabel("New chat")
+            .accessibilityIdentifier("chat.new")
+          }
+          if let thread = currentThread {
+            ToolbarItem(placement: .topBarTrailing) {
+              Menu {
+                Button("Rename", systemImage: "pencil") { startRename(thread) }
+                Button("Delete", systemImage: "trash", role: .destructive) { deleting = thread }
+                  .disabled(appState.generatingThreadID == thread.id)
+              } label: {
+                Image(systemName: "ellipsis")
+              }
+              .accessibilityLabel("Chat options")
+              .accessibilityIdentifier("chat.menu")
+            }
+          }
+        }
+    }
+  }
+
+  // MARK: - Drawer
+
+  private var drawer: some View {
+    DrawerView(
+      onSelect: { thread in
+        appState.selectedThreadID = thread.id
+        setDrawer(open: false)
+      },
+      onNewChat: newChat,
+      onRename: startRename,
+      onDelete: { deleting = $0 },
+      onSettings: {
+        showSettings = true
+      })
+  }
+
+  private func newChat() {
+    // Saved on the first message, so unused new chats never pile up.
+    appState.selectedThreadID = nil
+    setDrawer(open: false)
+  }
+
+  private func setDrawer(open: Bool) {
+    if open {
+      UIApplication.shared.sendAction(
+        #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+    withAnimation(.snappy(duration: 0.3)) {
+      drawerOpen = open
+      dragOffset = 0
+    }
+  }
+
+  /// Opens from the left edge (so code blocks and tables still scroll
+  /// sideways), closes from anywhere.
+  private func drawerDrag(width: CGFloat) -> some Gesture {
+    DragGesture(minimumDistance: 12)
+      .onChanged { value in
+        if !dragging {
+          let horizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
+          guard horizontal, drawerOpen || value.startLocation.x < 28 else { return }
+          dragging = true
+        }
+        dragOffset = drawerOpen ? min(0, value.translation.width) : max(0, value.translation.width)
+      }
+      .onEnded { value in
+        guard dragging else { return }
+        dragging = false
+        let projected = value.predictedEndTranslation.width
+        setDrawer(open: drawerOpen ? projected > -width / 3 : projected > width / 3)
+      }
+  }
+
+  // MARK: - Rename / delete
+
+  private var isRenaming: Binding<Bool> {
+    Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
+  }
+
+  private var isDeleting: Binding<Bool> {
+    Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
+  }
+
+  private func startRename(_ thread: ChatThread) {
+    renameText = thread.title
+    renaming = thread
+  }
+
+  private func commitRename() {
+    let title = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let thread = renaming, !title.isEmpty else { return }
+    thread.title = String(title.prefix(80))
+    try? context.save()
   }
 }
 

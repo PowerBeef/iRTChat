@@ -3,8 +3,8 @@ import SwiftUI
 struct ModelLibraryView: View {
   @Environment(AppState.self) private var appState
 
-  /// Hosts must provide the NavigationStack (the Models tab wraps it; the
-  /// chat screen pushes it onto its own stack).
+  /// Hosts provide the NavigationStack (Settings pushes it; the chat's
+  /// download banner presents it in a sheet).
   var body: some View {
     ScrollView {
       LazyVStack(spacing: DS.spaceLG) {
