@@ -54,9 +54,29 @@ final class ModelStore: NSObject {
       for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil,
       create: true
     )
-    let dir = base.appendingPathComponent("Models", isDirectory: true)
+    var dir = base.appendingPathComponent("Models", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    // Multi-GB, re-downloadable: keep out of iCloud/iTunes backups
+    // (directory exclusion covers every model file inside it).
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = true
+    try? dir.setResourceValues(values)
     return dir
+  }
+
+  /// Free space required beyond the file itself (model loading, caches, OS).
+  nonisolated static let storageMargin: Int64 = 500_000_000
+
+  /// Whether `availableBytes` (nil = unknown) can hold `spec`.
+  nonisolated static func hasRoom(for spec: ModelSpec, availableBytes: Int64?) -> Bool {
+    guard let availableBytes else { return true }
+    return availableBytes >= spec.sizeBytes + storageMargin
+  }
+
+  private func availableStorageBytes() -> Int64? {
+    guard let dir = try? Self.modelsDirectory() else { return nil }
+    return (try? dir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
+      .volumeAvailableCapacityForImportantUsage
   }
 
   func localURL(for spec: ModelSpec) -> URL? {
@@ -74,7 +94,9 @@ final class ModelStore: NSObject {
     removeUnknownModelFiles()
     for spec in ModelCatalog.all {
       if case .downloading = states[spec.id] { continue }
-      if case .paused = states[spec.id], resumeData[spec.id] != nil { continue }
+      // Resume data arrives asynchronously after a pause; without it,
+      // Resume simply restarts the download.
+      if case .paused = states[spec.id] { continue }
       states[spec.id] = isDownloaded(spec) ? .ready : .notDownloaded
     }
   }
@@ -82,7 +104,19 @@ final class ModelStore: NSObject {
   // MARK: - Actions
 
   func startDownload(_ spec: ModelSpec) {
-    cancelActiveTask()
+    if let current = downloadingSpec {
+      if current.id == spec.id { return }
+      // One download at a time: pause (keeping resume data) rather than
+      // abandoning the other model in a stuck "Downloading" state.
+      pauseDownload(current)
+    }
+    if resumeData[spec.id] == nil, !Self.hasRoom(for: spec, availableBytes: availableStorageBytes())
+    {
+      let needed = ByteCountFormatter.string(
+        fromByteCount: spec.sizeBytes + Self.storageMargin, countStyle: .file)
+      states[spec.id] = .failed(message: "Not enough storage. \(needed) free space is needed.")
+      return
+    }
     downloadingSpec = spec
     states[spec.id] = .downloading(progress: 0)
     let task: URLSessionDownloadTask
@@ -101,14 +135,14 @@ final class ModelStore: NSObject {
     guard downloadingSpec?.id == spec.id, let task = activeTask else { return }
     let progress: Double
     if case .downloading(let p) = states[spec.id] { progress = p } else { progress = 0 }
+    // Release the slot now (a new download may start immediately); the
+    // resume data arrives asynchronously and only touches this model's entry.
+    activeTask = nil
+    downloadingSpec = nil
+    states[spec.id] = .paused(progress: progress)
     task.cancel { [weak self] data in
-      guard let self else { return }
-      Task { @MainActor in
-        if let data { self.resumeData[spec.id] = data }
-        self.activeTask = nil
-        self.downloadingSpec = nil
-        self.states[spec.id] = .paused(progress: progress)
-      }
+      guard let data else { return }
+      Task { @MainActor in self?.resumeData[spec.id] = data }
     }
   }
 
@@ -128,12 +162,6 @@ final class ModelStore: NSObject {
       try? FileManager.default.removeItem(at: url)
     }
     states[spec.id] = .notDownloaded
-  }
-
-  private func cancelActiveTask() {
-    activeTask?.cancel()
-    activeTask = nil
-    downloadingSpec = nil
   }
 
   /// Delete `.litertlm` files that are no longer in the catalog (e.g. after
@@ -158,6 +186,14 @@ final class ModelStore: NSObject {
   ///
   /// - Throws: the underlying `FileManager` error, or
   ///   `ModelStoreError.sizeMismatch` (partial/corrupt file is removed).
+  /// Reject error pages (e.g. HTTP 404/5xx bodies saved as the "model").
+  nonisolated static func validateResponse(_ response: URLResponse?) throws {
+    guard let http = response as? HTTPURLResponse else { return }
+    guard (200...299).contains(http.statusCode) else {
+      throw ModelStoreError.httpStatus(http.statusCode)
+    }
+  }
+
   @discardableResult
   nonisolated static func placeDownloadedFile(
     from location: URL, fileName: String, expectedSize: Int64, in directory: URL
@@ -180,12 +216,15 @@ final class ModelStore: NSObject {
 
 enum ModelStoreError: Error, LocalizedError, Equatable {
   case sizeMismatch(expected: Int64, actual: Int64)
+  case httpStatus(Int)
 
   var errorDescription: String? {
     switch self {
     case .sizeMismatch(let expected, let actual):
       return
         "Downloaded file failed verification (got \(actual) bytes, expected \(expected)). Please retry."
+    case .httpStatus(let code):
+      return "The download server returned HTTP \(code). Please retry later."
     }
   }
 }
@@ -204,6 +243,7 @@ extension ModelStore: URLSessionDownloadDelegate {
     var placementError: Error?
     if let spec, let directory = try? Self.modelsDirectory() {
       do {
+        try Self.validateResponse(downloadTask.response)
         try Self.placeDownloadedFile(
           from: location, fileName: spec.fileName, expectedSize: spec.sizeBytes,
           in: directory)
@@ -234,10 +274,13 @@ extension ModelStore: URLSessionDownloadDelegate {
     didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
     totalBytesExpectedToWrite: Int64
   ) {
-    guard totalBytesExpectedToWrite > 0 else { return }
+    guard totalBytesExpectedToWrite > 0,
+      let id = downloadTask.taskDescription.flatMap(ModelID.init(rawValue:))
+    else { return }
     let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
     Task { @MainActor [weak self] in
-      guard let self, let id = self.downloadingSpec?.id else { return }
+      // Ignore late callbacks from a paused/cancelled task.
+      guard let self, self.downloadingSpec?.id == id else { return }
       self.states[id] = .downloading(progress: progress)
     }
   }
@@ -249,8 +292,9 @@ extension ModelStore: URLSessionDownloadDelegate {
     let nsError = error as NSError
     if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
     let resume = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+    let id = task.taskDescription.flatMap(ModelID.init(rawValue:))
     Task { @MainActor [weak self] in
-      guard let self, let spec = self.downloadingSpec else { return }
+      guard let self, let spec = self.downloadingSpec, spec.id == id else { return }
       if let resume { self.resumeData[spec.id] = resume }
       self.activeTask = nil
       self.downloadingSpec = nil

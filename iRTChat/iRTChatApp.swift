@@ -50,6 +50,7 @@ struct iRTChatApp: App {
       Log.lifecycle.info(
         "scenePhase=\(String(describing: phase), privacy: .public) generating=\(appState.isGenerating)"
       )
+      if phase == .background { appState.enterBackground() }
     }
   }
 }

@@ -376,10 +376,11 @@ final class AppState {
     }
 
     // Persist the user turn.
-    let userTurn = ChatTurn(role: .user, text: prompt, imageData: imageData)
+    let userTurn = ChatTurn(
+      role: .user, text: prompt, imageData: imageData, hasAudio: audioFileURL != nil)
     thread.turns.append(userTurn)
     if thread.title == "New chat" {
-      thread.title = String(prompt.prefix(42))
+      thread.title = Self.title(prompt: prompt, hasImage: imageData != nil)
     }
     // Placeholder model turn, mutated live as chunks stream in.
     let reply = ChatTurn(role: .model)
@@ -400,6 +401,12 @@ final class AppState {
       await applyCurrentOptions()
     }
     return true
+  }
+
+  /// Chat title from the first message; attachment-only messages get a label.
+  static func title(prompt: String, hasImage: Bool) -> String {
+    if !prompt.isEmpty { return String(prompt.prefix(42)) }
+    return hasImage ? "Photo" : "Voice message"
   }
 
   private func consume(
@@ -424,6 +431,9 @@ final class AppState {
       if case .generationCancelled = error {
         if reply.text.isEmpty { context.delete(reply) }
         try? context.save()
+        // LiteRT-LM leaves a cancelled conversation unusable: rebuild it from
+        // the thread's history (incl. the partial reply) before the next send.
+        conversationThreadID = nil
       } else {
         reply.text = reply.text.isEmpty ? ChatTurn.errorPrefix + error.displayMessage : reply.text
         try? context.save()
@@ -438,6 +448,16 @@ final class AppState {
 
   func stop() {
     Task { await engine.cancel() }
+  }
+
+  /// iOS doesn't allow GPU work in the background: stop a running reply
+  /// deliberately (keeping the partial text) instead of letting Metal
+  /// command buffers fail or the app be terminated.
+  func enterBackground() {
+    guard isGenerating else { return }
+    Log.lifecycle.info("background: stopping generation")
+    stop()
+    generationError = "Reply stopped because iRTChat moved to the background."
   }
 
   // MARK: - Benchmark

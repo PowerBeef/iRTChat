@@ -80,6 +80,54 @@ final class ModelStoreTests: XCTestCase {
     XCTAssertEqual(data, Data(repeating: 0xFF, count: 8))
   }
 
+  // MARK: - Download hygiene (audit #9)
+
+  func testModelsDirectoryIsExcludedFromBackup() throws {
+    let dir = try ModelStore.modelsDirectory()
+    let values = try dir.resourceValues(forKeys: [.isExcludedFromBackupKey])
+    XCTAssertEqual(values.isExcludedFromBackup, true)
+  }
+
+  func testStorageCheckRequiresFileSizePlusMargin() {
+    let spec = ModelCatalog.e2b
+    XCTAssertTrue(ModelStore.hasRoom(for: spec, availableBytes: nil))
+    XCTAssertTrue(
+      ModelStore.hasRoom(for: spec, availableBytes: spec.sizeBytes + ModelStore.storageMargin))
+    XCTAssertFalse(ModelStore.hasRoom(for: spec, availableBytes: spec.sizeBytes))
+  }
+
+  func testErrorPagesAreRejected() throws {
+    let url = ModelCatalog.e2b.downloadURL
+    let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+    let missing = HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)
+    XCTAssertNoThrow(try ModelStore.validateResponse(ok))
+    XCTAssertThrowsError(try ModelStore.validateResponse(missing)) { error in
+      XCTAssertEqual(error as? ModelStoreError, .httpStatus(404))
+    }
+  }
+
+  /// Starting a second download used to leave the first stuck on
+  /// "Downloading…" with dead Pause/Cancel buttons.
+  @MainActor
+  func testStartingAnotherDownloadPausesTheFirst() {
+    let store = ModelStore()
+    guard !store.isDownloaded(ModelCatalog.e2b), !store.isDownloaded(ModelCatalog.e4b) else {
+      return
+    }
+    store.startDownload(ModelCatalog.e2b)
+    store.startDownload(ModelCatalog.e4b)
+    defer {
+      store.cancelDownload(ModelCatalog.e4b)
+      store.cancelDownload(ModelCatalog.e2b)
+    }
+    guard case .paused = store.states[.e2b] else {
+      return XCTFail("First download should be paused, is \(String(describing: store.states[.e2b]))")
+    }
+    guard case .downloading = store.states[.e4b] else {
+      return XCTFail("Second download should be active, is \(String(describing: store.states[.e4b]))")
+    }
+  }
+
   // MARK: - Active model selection
 
   @MainActor

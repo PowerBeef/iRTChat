@@ -55,6 +55,11 @@ actor LiteRTChatEngine: ChatEngineProtocol {
   private var builtPlan: ResolvedInference?
   private var toolsEnabled = true
   private var generating = false
+  /// Set by ``cancel()`` during a generation. LiteRT-LM leaves the
+  /// conversation cancelled afterwards (the next message fails with
+  /// "CANCELLED"), so a cancelled generation always ends as
+  /// ``ChatError/generationCancelled`` and the caller must reseed.
+  private var cancelRequested = false
   /// Human-readable trace of the most recent `load`: capabilities and every
   /// attempt on the backend ladder with its outcome (read by the device harness).
   private(set) var loadLog: [String] = []
@@ -416,6 +421,7 @@ actor LiteRTChatEngine: ChatEngineProtocol {
       return
     }
     generating = true
+    cancelRequested = false
     defer { generating = false }
 
     var contents: [Content] = []
@@ -423,6 +429,8 @@ actor LiteRTChatEngine: ChatEngineProtocol {
       contents.append(.text("Describe this image in detail."))
     } else if !text.isEmpty {
       contents.append(.text(text))
+    } else if audioFileURL != nil {
+      contents.append(.text("Listen to this voice message and respond to it."))
     } else {
       contents.append(.text("Hello!"))
     }
@@ -509,6 +517,11 @@ actor LiteRTChatEngine: ChatEngineProtocol {
       if !lateTools.isEmpty {
         continuation.yield(.chunk(ChatChunk(textDelta: "", thoughtDelta: nil, toolNames: lateTools)))
       }
+      if cancelRequested {
+        Log.generation.info("cancelled (user)")
+        continuation.finish(throwing: ChatError.generationCancelled)
+        return
+      }
       let final = stats(started: started, firstChunkAt: firstChunkAt)
       if imageData == nil, audioFileURL == nil, measuredBefore > 0 {
         calibrate(text: text, measuredBefore: measuredBefore, outputTokens: final.outputTokens)
@@ -523,6 +536,11 @@ actor LiteRTChatEngine: ChatEngineProtocol {
       try? conversation.cancel()
       continuation.finish(throwing: ChatError.generationCancelled)
     } catch {
+      if cancelRequested {
+        Log.generation.info("cancelled (user): \(String(describing: error), privacy: .public)")
+        continuation.finish(throwing: ChatError.generationCancelled)
+        return
+      }
       Log.generation.error("stream error: \(String(describing: error), privacy: .public)")
       if let chatError = error as? ChatError {
         continuation.finish(throwing: chatError)
@@ -535,6 +553,8 @@ actor LiteRTChatEngine: ChatEngineProtocol {
 
   func cancel() async {
     Log.generation.info("cancel requested (generating=\(self.generating))")
+    guard generating else { return }
+    cancelRequested = true
     try? conversation?.cancel()
   }
 }
@@ -611,19 +631,33 @@ actor MockChatEngine: ChatEngineProtocol {
       Task {
         let script = await self.script
         let stats = await self.stats
+        await self.setGenerating(true)
         for chunk in script {
           try? await Task.sleep(for: .milliseconds(60))
-          if Task.isCancelled {
+          let stopRequested = await self.cancelRequested
+          if Task.isCancelled || stopRequested {
+            await self.setGenerating(false)
             continuation.finish(throwing: ChatError.generationCancelled)
             return
           }
           continuation.yield(.chunk(chunk))
         }
+        await self.setGenerating(false)
         continuation.yield(.finished(stats))
         continuation.finish()
       }
     }
   }
 
-  func cancel() async {}
+  private var generating = false
+  private(set) var cancelRequested = false
+
+  private func setGenerating(_ value: Bool) {
+    generating = value
+    if value { cancelRequested = false }
+  }
+
+  func cancel() async {
+    if generating { cancelRequested = true }
+  }
 }

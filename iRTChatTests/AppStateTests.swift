@@ -1,4 +1,5 @@
 import SwiftData
+import UIKit
 import XCTest
 
 @testable import iRTChat
@@ -94,6 +95,29 @@ final class AppStateTests: XCTestCase {
     XCTAssertNotNil(appState.generationError)
   }
 
+  // MARK: - Stop (device finding: next message failed with CANCELLED)
+
+  func testStoppedConversationIsRebuiltBeforeTheNextMessage() async throws {
+    let thread = appState.newThread(in: context)
+    let state: AppState = appState
+    let sending = Task { @MainActor in
+      await state.send(text: "Long story", imageData: nil, audioFileURL: nil, in: thread)
+    }
+    try await Task.sleep(for: .milliseconds(90))  // first chunk streamed
+    appState.stop()
+    _ = await sending.value
+    let partial = thread.orderedTurns.last(where: { !$0.isUser })?.text ?? ""
+    XCTAssertFalse(partial.hasPrefix(ChatTurn.errorPrefix), "Stop surfaced as an error")
+
+    let reseedsBefore = await mock.reseedLog.count
+    let accepted = await appState.send(
+      text: "Continue", imageData: nil, audioFileURL: nil, in: thread)
+    XCTAssertTrue(accepted)
+    let log = await mock.reseedLog
+    XCTAssertEqual(log.count, reseedsBefore + 1, "Cancelled conversation must be rebuilt")
+    XCTAssertEqual(log.last?.first, "Long story")
+  }
+
   // MARK: - Context window (audit #15)
 
   func testTrimmedContextSendsAndShowsNotice() async {
@@ -122,6 +146,39 @@ final class AppStateTests: XCTestCase {
     thread.turns.append(ChatTurn(role: .model, text: ChatTurn.errorPrefix + "boom"))
     thread.turns.append(ChatTurn(role: .user, text: "Again"))
     XCTAssertEqual(thread.textHistory.map(\.text), ["Hi", "Again"])
+  }
+
+  /// Audit #13: the 1568 px cap must be pixels, not points × screen scale.
+  func testImagePreparerCapsPixels() throws {
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1
+    let big = UIGraphicsImageRenderer(size: CGSize(width: 4000, height: 3000), format: format)
+      .image { context in
+        UIColor.blue.setFill()
+        context.fill(CGRect(x: 0, y: 0, width: 4000, height: 3000))
+      }
+    let prepared = try XCTUnwrap(ImagePreparer.prepare(try XCTUnwrap(big.jpegData(compressionQuality: 0.9))))
+    let image = try XCTUnwrap(UIImage(data: prepared))
+    XCTAssertEqual(image.size.width * image.scale, 1568)
+    XCTAssertEqual(image.size.height * image.scale, 1176)
+  }
+
+  // MARK: - Attachment-only messages (audit #12)
+
+  func testVoiceOnlyMessageIsLabelledAndTitled() async {
+    let thread = appState.newThread(in: context)
+    let voice = FileManager.default.temporaryDirectory.appendingPathComponent("voice.wav")
+    let accepted = await appState.send(text: "", imageData: nil, audioFileURL: voice, in: thread)
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(thread.title, "Voice message")
+    XCTAssertEqual(thread.orderedTurns.first?.hasAudio, true)
+  }
+
+  func testTitles() {
+    XCTAssertEqual(AppState.title(prompt: "Hello there", hasImage: true), "Hello there")
+    XCTAssertEqual(AppState.title(prompt: "", hasImage: true), "Photo")
+    XCTAssertEqual(AppState.title(prompt: "", hasImage: false), "Voice message")
+    XCTAssertEqual(AppState.title(prompt: String(repeating: "a", count: 100), hasImage: false).count, 42)
   }
 
   func testOptionChangeDoesNotLoadAnUnloadedModel() async {

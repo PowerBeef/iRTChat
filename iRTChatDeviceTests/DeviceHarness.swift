@@ -61,6 +61,7 @@ final class DeviceHarness {
       "model": UIDevice.current.model,
       "system": "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)",
       "memoryGB": DeviceProfile.current.memoryGB,
+      "profile": DeviceProfile.current.summary,
     ]
     report["startedAt"] = ISO8601DateFormatter().string(from: Date())
     // XCTest relaunches the app after a crash and continues with the next

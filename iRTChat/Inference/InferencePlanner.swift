@@ -215,7 +215,9 @@ enum InferencePlanner {
   ) -> ResolvedInference {
     var out = resolved
     if !caps.speculativeDecoding { out.enableSpeculativeDecoding = false }
-    if !caps.thinking { out.thinkingBudget = nil }
+    // `caps.thinking` (like `caps.functionCalling`) is not trusted: the
+    // Gemma 4 E2B file reports false for both, yet streams reasoning and
+    // calls tools on device. Thinking stays a user choice.
     out.enableVision = out.enableVision && caps.vision
     out.enableAudio = out.enableAudio && caps.audio
     if !out.enableVision {

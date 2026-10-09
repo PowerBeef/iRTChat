@@ -70,6 +70,9 @@ final class ChatFlowUITests: XCTestCase {
     attachScreenshot("after-background")
     XCTAssertFalse(
       lastModelText().hasPrefix("Error:"), "Backgrounding broke the reply: \(lastModelText())")
+    XCTAssertTrue(
+      element("chat.banner.notice").exists,
+      "Expected the 'stopped because the app moved to the background' notice")
     // The engine must still work afterwards.
     send("Say 'ready'.")
     try waitForReplyToFinish(timeout: 120)

@@ -115,7 +115,9 @@ final class InferencePlannerTests: XCTestCase {
       maxContextTokens: 0, dynamicContext: true)
     let out = InferencePlanner.applyCapabilities(caps, to: plan)
     XCTAssertFalse(out.enableSpeculativeDecoding)
-    XCTAssertNil(out.thinkingBudget)
+    // Device finding: the thinking flag is unreliable (E2B reports false yet
+    // reasons), so thinking is never stripped.
+    XCTAssertEqual(out.thinkingBudget, plan.thinkingBudget)
     XCTAssertFalse(out.enableVision)
     XCTAssertFalse(out.enableAudio)
     XCTAssertNil(out.visualTokenBudget)

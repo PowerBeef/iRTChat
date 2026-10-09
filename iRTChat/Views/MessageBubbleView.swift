@@ -27,6 +27,14 @@ struct MessageBubbleView: View {
             .frame(maxHeight: 220)
             .clipShape(.rect(cornerRadius: DS.radiusBanner))
         }
+        if turn.hasAudio {
+          Label("Voice message", systemImage: "waveform")
+            .font(.callout)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .glassEffect(.regular.tint(.accentColor), in: .rect(cornerRadius: DS.radiusBubble))
+            .accessibilityIdentifier("message.voice")
+        }
         if !turn.text.isEmpty {
           Text(turn.text)
             .textSelection(.enabled)

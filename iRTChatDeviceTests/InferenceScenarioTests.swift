@@ -108,9 +108,11 @@ final class InferenceScenarioTests: DeviceTestCase {
     XCTAssertFalse(reply?.text.hasPrefix("Error:") ?? false, "Stop surfaced as an error")
     XCTAssertLessThan(
       reply?.text.count ?? 0, 3000, "Generation kept running after Stop")
-    // The engine must be usable right after a stop.
-    let after = await harness.ask("Say 'ready'.", in: harness.newThread())
-    XCTAssertFalse(after.text.hasPrefix("Error:"), "Engine broken after stop: \(after.text)")
+    // The same chat must keep working right after a stop (LiteRT-LM leaves a
+    // cancelled conversation failing with "CANCELLED" unless it is rebuilt).
+    let after = await harness.ask("Say 'ready'.", in: thread)
+    XCTAssertFalse(after.text.isEmpty, "No reply after stop")
+    XCTAssertFalse(after.text.hasPrefix("Error:"), "Chat broken after stop: \(after.text)")
   }
 
   func test05_ToolCall() async throws {

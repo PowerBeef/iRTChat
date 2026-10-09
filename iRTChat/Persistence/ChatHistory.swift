@@ -49,14 +49,17 @@ final class ChatTurn {
   var statsData: Data?
   @Attribute(.externalStorage)
   var imageData: Data?
+  /// The user sent a voice message (the audio itself is not stored).
+  var hasAudio: Bool = false
   var createdAt: Date
   var thread: ChatThread?
 
   init(
     role: ChatRole, text: String = "", thought: String = "",
     toolNames: [String] = [], stats: GenerationStats? = nil,
-    imageData: Data? = nil
+    imageData: Data? = nil, hasAudio: Bool = false
   ) {
+    self.hasAudio = hasAudio
     self.id = UUID()
     self.roleRaw = role == .user ? "user" : "model"
     self.text = text
