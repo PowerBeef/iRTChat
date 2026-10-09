@@ -139,6 +139,22 @@ final class ChatFlowUITests: XCTestCase {
       app.descendants(matching: .any).matching(identifier: "threads.row").count, 2)
   }
 
+  /// Rich replies: code block (with Copy), table and display math render.
+  /// Simulator only: the mock engine answers "markdown" with a fixed sample.
+  func testMarkdownRendering() throws {
+    try XCTSkipUnless(Self.isSimulator, "Uses the mock engine's markdown sample")
+    try openNewChat()
+    send("Show me markdown")
+    try waitForReplyToFinish(timeout: 30)
+    attachScreenshot("markdown")
+    XCTAssertTrue(element("message.code").waitForExistence(timeout: 5), "Code block missing")
+    XCTAssertTrue(element("message.table").exists, "Table missing")
+    XCTAssertTrue(element("message.math").exists, "Display math missing")
+    let copy = element("code.copy")
+    XCTAssertTrue(copy.exists)
+    copy.tap()
+  }
+
   /// E4B is the only model: its card shows Ready (device) or Download.
   func testModelsTabShowsTheModel() throws {
     app.tabBars.buttons["Models"].tap()

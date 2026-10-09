@@ -9,6 +9,21 @@ This product includes software developed by Google LLC:
   Licensed under the Apache License, Version 2.0
   https://github.com/google-ai-edge/LiteRT-LM
 
+This product includes the following Swift packages (resolved via Swift
+Package Manager, not stored in this repository):
+
+  swift-markdown — Copyright Apple Inc. and the Swift project authors
+  Licensed under the Apache License, Version 2.0
+  https://github.com/swiftlang/swift-markdown
+
+  swift-cmark (GitHub-flavored cmark) — Copyright (c) 2014, John MacFarlane
+  Licensed under the BSD 2-Clause License
+  https://github.com/swiftlang/swift-cmark
+
+  SwiftMath — Copyright (c) 2023 Computer Inspirations
+  Licensed under the MIT License
+  https://github.com/mgriebling/SwiftMath
+
 At runtime, the app downloads model weights that are not distributed
 with this repository:
 

@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		300000000000000000000024 /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = 100000000000000000000006 /* LiteRTLM */; };
+		500000000000000000000003 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 500000000000000000000002 /* Markdown */; };
+		500000000000000000000006 /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = 500000000000000000000005 /* SwiftMath */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -96,6 +98,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				300000000000000000000024 /* LiteRTLM in Frameworks */,
+				500000000000000000000003 /* Markdown in Frameworks */,
+				500000000000000000000006 /* SwiftMath in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -164,6 +168,8 @@
 			name = iRTChat;
 			packageProductDependencies = (
 				100000000000000000000006 /* LiteRTLM */,
+				500000000000000000000002 /* Markdown */,
+				500000000000000000000005 /* SwiftMath */,
 			);
 			fileSystemSynchronizedGroups = (
 				400000000000000000000041 /* iRTChat */,
@@ -273,6 +279,8 @@
 			mainGroup = 10000000000000000000000D;
 			packageReferences = (
 				100000000000000000000005 /* XCLocalSwiftPackageReference "Vendor/LiteRT-LM" */,
+				500000000000000000000001 /* XCRemoteSwiftPackageReference "swift-markdown" */,
+				500000000000000000000004 /* XCRemoteSwiftPackageReference "SwiftMath" */,
 			);
 			productRefGroup = 100000000000000000000015 /* Products */;
 			projectDirPath = "";
@@ -694,11 +702,40 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		500000000000000000000001 /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-markdown.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
+		500000000000000000000004 /* XCRemoteSwiftPackageReference "SwiftMath" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mgriebling/SwiftMath.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.7.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		100000000000000000000006 /* LiteRTLM */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 100000000000000000000005 /* XCLocalSwiftPackageReference "Vendor/LiteRT-LM" */;
 			productName = LiteRTLM;
+		};
+		500000000000000000000002 /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 500000000000000000000001 /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			productName = Markdown;
+		};
+		500000000000000000000005 /* SwiftMath */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 500000000000000000000004 /* XCRemoteSwiftPackageReference "SwiftMath" */;
+			productName = SwiftMath;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

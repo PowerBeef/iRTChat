@@ -253,6 +253,9 @@ iRTChat is licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE
 | --- | --- | --- |
 | iRTChat source code | This repository | Apache 2.0 |
 | LiteRT-LM | Vendored in `Vendor/LiteRT-LM` | Apache 2.0 |
+| swift-markdown | Swift package | Apache 2.0 |
+| swift-cmark | Swift package (via swift-markdown) | BSD 2-Clause |
+| SwiftMath | Swift package | MIT |
 | Gemma 4 E4B | Downloaded at runtime | Apache 2.0 |
 
 ## Acknowledgements

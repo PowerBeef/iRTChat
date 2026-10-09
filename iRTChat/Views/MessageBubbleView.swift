@@ -70,10 +70,9 @@ struct MessageBubbleView: View {
           .accessibilityIdentifier("message.toolStatus")
         }
         if !turn.text.isEmpty {
-          HStack(alignment: .lastTextBaseline, spacing: 3) {
-            renderedText(turn.text)
+          VStack(alignment: .leading, spacing: 6) {
+            MarkdownView(turn.text)
               .textSelection(.enabled)
-              .accessibilityIdentifier("message.model")
             if isStreaming {
               RoundedRectangle(cornerRadius: 1.5)
                 .fill(Color.accentColor)
@@ -83,9 +82,13 @@ struct MessageBubbleView: View {
                 } animation: { _ in
                   .easeInOut(duration: 0.6).repeatForever()
                 }
+                .accessibilityHidden(true)
             }
           }
           .frame(maxWidth: .infinity, alignment: .leading)
+          .accessibilityElement(children: .contain)
+          .accessibilityLabel(Text(turn.text))
+          .accessibilityIdentifier("message.model")
         } else if isStreaming {
           thinkingDots
         }
@@ -154,14 +157,5 @@ struct MessageBubbleView: View {
         }
       }
     }
-  }
-
-  private func renderedText(_ text: String) -> some View {
-    if let attributed = try? AttributedString(
-      markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
-    {
-      return Text(attributed).lineSpacing(3)
-    }
-    return Text(text).lineSpacing(3)
   }
 }

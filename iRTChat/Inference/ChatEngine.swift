@@ -690,7 +690,9 @@ actor MockChatEngine: ChatEngineProtocol {
   ) -> AsyncThrowingStream<ChatEvent, Error> {
     AsyncThrowingStream { continuation in
       Task {
-        let script = await self.script
+        let script =
+          text.localizedCaseInsensitiveContains("markdown")
+          ? MockChatEngine.markdownSample : await self.script
         let stats = await self.stats
         await self.setGenerating(true)
         for chunk in script {
@@ -721,6 +723,45 @@ actor MockChatEngine: ChatEngineProtocol {
   func cancel() async {
     if generating { cancelRequested = true }
   }
+
+  /// Rich reply for UI checks of markdown rendering (prompt contains "markdown").
+  static let markdownSample: [ChatChunk] = {
+    let text = """
+      ## Lighthouse facts
+
+      Lighthouses use **Fresnel lenses** to focus light. A beam is visible for about *20 nautical miles*.
+
+      1. Lamp
+      2. Lens
+         - Fresnel rings
+      3. Gallery
+
+      ```swift
+      let range = 20 // nautical miles
+      print("Visible for \\(range) nm")
+      ```
+
+      | Part | Purpose |
+      | :--- | :--- |
+      | Lens | Focus the light |
+      | Gallery | Maintenance access |
+
+      Since $d \\approx 1.17\\sqrt{h}$, a taller tower sees farther:
+
+      $$
+      d = 1.17 \\sqrt{h}
+      $$
+
+      > Keep the lens polished.
+      """
+    // Stream in a few chunks like a real reply.
+    let parts = stride(from: 0, to: text.count, by: 120).map { offset -> String in
+      let start = text.index(text.startIndex, offsetBy: offset)
+      let end = text.index(start, offsetBy: min(120, text.count - offset))
+      return String(text[start..<end])
+    }
+    return parts.map { ChatChunk(textDelta: $0, thoughtDelta: nil) }
+  }()
 
   /// Scripted helper output (tests) and a log of prompts.
   private(set) var helperResponse = Data(#"{"title":"Mock chat"}"#.utf8)
