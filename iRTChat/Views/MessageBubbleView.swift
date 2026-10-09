@@ -256,6 +256,7 @@ struct MessageBubbleView: View {
         .foregroundStyle(.secondary)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("message.reasoning.text")
     } label: {
       Label("Reasoning", systemImage: "brain")
         .font(.caption)
@@ -263,6 +264,8 @@ struct MessageBubbleView: View {
     }
     .padding(DS.padMD)
     .glassEffect(.regular, in: .rect(cornerRadius: DS.radiusInner))
+    // A container keeps the reasoning text's own identifier.
+    .accessibilityElement(children: .contain)
     .accessibilityIdentifier("message.reasoning")
   }
 

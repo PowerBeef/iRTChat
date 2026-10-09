@@ -1,8 +1,22 @@
 import SwiftData
 import SwiftUI
 
+/// Receives background download events when iOS relaunches the app for them.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+  func application(
+    _ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+    completionHandler: @escaping () -> Void
+  ) {
+    guard identifier == BackgroundDownloads.identifier else { return completionHandler() }
+    BackgroundDownloads.completionHandler = completionHandler
+    // Reconnect to the session so its pending events are delivered.
+    _ = BackgroundDownloads.session
+  }
+}
+
 @main
 struct iRTChatApp: App {
+  @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @State private var appState: AppState
   @Environment(\.scenePhase) private var scenePhase
   let container: ModelContainer
@@ -23,7 +37,9 @@ struct iRTChatApp: App {
       try? container.mainContext.delete(model: ChatTurn.self)
       try? container.mainContext.delete(model: ChatThread.self)
       try? container.mainContext.save()
-      for key in ["inferenceOptions", "enableTools", "selectedThreadID", "activeModelID"] {
+      for key in [
+        "inferenceOptions", "enableTools", "selectedThreadID", "activeModelID", "personalization",
+      ] {
         UserDefaults.standard.removeObject(forKey: key)
       }
     }

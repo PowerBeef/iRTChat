@@ -454,6 +454,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = iRTChat;
 				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "iRTChat uses the camera to take photos for the on-device model to see.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "iRTChat uses the microphone to record voice messages for the on-device model.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "iRTChat lets you attach photos for the on-device model to see.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -484,6 +485,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = iRTChat;
 				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "iRTChat uses the camera to take photos for the on-device model to see.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "iRTChat uses the microphone to record voice messages for the on-device model.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "iRTChat lets you attach photos for the on-device model to see.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

@@ -14,6 +14,8 @@ struct ChatView: View {
   @State private var photoItem: PhotosPickerItem?
   @State private var recorder = AudioRecorder()
   @State private var showLibrary = false
+  @State private var showPhotos = false
+  @State private var showCamera = false
   @State private var reader = SpeechReader()
   /// The user message being edited in the composer, if any.
   @State private var editingTurn: ChatTurn?
@@ -366,54 +368,101 @@ struct ChatView: View {
     }
   }
 
-  // MARK: - Input
+  // MARK: - Composer
 
+  /// ChatGPT-style composer: the message on top; attachments, Think, the
+  /// microphone and Send/Stop below, in one glass card. You can type the
+  /// next message while a reply is streaming.
   private var inputBar: some View {
-    GlassEffectContainer(spacing: DS.spaceMD) {
-      HStack(alignment: .bottom, spacing: DS.spaceMD) {
-        inputButtons
-        TextField("Message", text: $draft, axis: .vertical)
-          .lineLimit(1...6)
-          .textFieldStyle(.plain)
-          .padding(.horizontal, 14)
-          .padding(.vertical, DS.padMD)
-          .glassEffect(.regular, in: .rect(cornerRadius: DS.radiusCard))
-          .focused($inputFocused)
-          .accessibilityIdentifier("chat.input")
-          .disabled(appState.isGenerating)
+    VStack(alignment: .leading, spacing: 6) {
+      TextField("Ask anything", text: $draft, axis: .vertical)
+        .lineLimit(1...8)
+        .textFieldStyle(.plain)
+        .padding(.horizontal, 6)
+        .padding(.top, 6)
+        .focused($inputFocused)
+        .accessibilityIdentifier("chat.input")
+      HStack(spacing: DS.spaceMD) {
+        attachMenu
+        thinkToggle
+        Spacer(minLength: 0)
+        micButton
         actionButton
       }
-      .padding(.horizontal)
-      .padding(.vertical, 8)
+    }
+    .padding(10)
+    .glassEffect(.regular, in: .rect(cornerRadius: 26))
+    .padding(.horizontal, 12)
+    .padding(.bottom, 6)
+    .photosPicker(isPresented: $showPhotos, selection: $photoItem, matching: .images)
+    .onChange(of: photoItem) { _, item in
+      Task {
+        if let item, let data = try? await item.loadTransferable(type: Data.self) {
+          pendingImage = ImagePreparer.prepare(data) ?? data
+        }
+        photoItem = nil
+      }
+    }
+    .fullScreenCover(isPresented: $showCamera) {
+      CameraPicker { data in
+        pendingImage = ImagePreparer.prepare(data) ?? data
+      }
+      .ignoresSafeArea()
     }
   }
 
-  private var inputButtons: some View {
-    HStack(spacing: DS.spaceMD) {
-      PhotosPicker(selection: $photoItem, matching: .images) {
-        Image(systemName: "photo")
-          .frame(width: DS.controlTarget, height: DS.controlTarget)
-          .glassEffect(.regular.interactive(), in: .circle)
-      }
-      .disabled(appState.isGenerating || editingTurn != nil)
-      .onChange(of: photoItem) { _, item in
-        Task {
-          if let item, let data = try? await item.loadTransferable(type: Data.self) {
-            pendingImage = ImagePreparer.prepare(data) ?? data
-          }
-          photoItem = nil
-        }
-      }
+  private var attachDisabled: Bool { appState.isGenerating || editingTurn != nil }
 
-      Button(action: { Task { await recorder.toggle() } }) {
-        Image(systemName: recorder.isRecording ? "stop.fill" : "mic")
-          .frame(width: DS.controlTarget, height: DS.controlTarget)
-          .glassEffect(
-            recorder.isRecording ? .regular.tint(.red).interactive() : .regular.interactive(),
-            in: .circle)
-      }
-      .disabled(appState.isGenerating || editingTurn != nil)
+  private var attachMenu: some View {
+    Menu {
+      Button("Camera", systemImage: "camera") { showCamera = true }
+        .disabled(!CameraPicker.isAvailable)
+      Button("Photos", systemImage: "photo.on.rectangle") { showPhotos = true }
+    } label: {
+      Image(systemName: "plus")
+        .font(.body.weight(.medium))
+        .frame(width: DS.controlTarget, height: DS.controlTarget)
+        .glassEffect(.regular.interactive(), in: .circle)
     }
+    .disabled(attachDisabled)
+    .accessibilityLabel("Add photos")
+    .accessibilityIdentifier("composer.attach")
+  }
+
+  /// Reasoning for the next messages (applies before the next send).
+  private var thinkToggle: some View {
+    let isOn = appState.options.enableThinking
+    return Button {
+      appState.options.enableThinking.toggle()
+      appState.scheduleApplyOptions()
+      Haptics.complete()
+    } label: {
+      Label("Think", systemImage: "lightbulb")
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(isOn ? Color.accentColor : .secondary)
+        .padding(.horizontal, 12)
+        .frame(height: 36)
+        .glassEffect(
+          isOn ? .regular.tint(.accentColor.opacity(0.25)).interactive() : .regular.interactive(),
+          in: .capsule)
+    }
+    .buttonStyle(.plain)
+    .disabled(appState.isGenerating)
+    .accessibilityValue(isOn ? "On" : "Off")
+    .accessibilityIdentifier("composer.think")
+  }
+
+  private var micButton: some View {
+    Button(action: { Task { await recorder.toggle() } }) {
+      Image(systemName: recorder.isRecording ? "stop.fill" : "mic")
+        .frame(width: DS.controlTarget, height: DS.controlTarget)
+        .glassEffect(
+          recorder.isRecording ? .regular.tint(.red).interactive() : .regular.interactive(),
+          in: .circle)
+    }
+    .disabled(attachDisabled)
+    .accessibilityLabel(recorder.isRecording ? "Stop recording" : "Record voice message")
+    .accessibilityIdentifier("composer.mic")
   }
 
   @ViewBuilder

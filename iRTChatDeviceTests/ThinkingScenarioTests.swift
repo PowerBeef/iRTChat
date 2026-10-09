@@ -59,4 +59,40 @@ final class ThinkingScenarioTests: DeviceTestCase {
     harness.record("e4b_02_thinking", ["results": results, "afterThinking": after.text], in: self)
     XCTAssertFalse(after.text.hasPrefix(ChatTurn.errorPrefix), after.text)
   }
+
+  /// "Compact reasoning cache" keeps thought tokens out of the KV cache.
+  /// Multi-turn chat must keep working (and remember earlier answers).
+  func test02_CompactReasoningCache() async throws {
+    try await requireLoadedModel()
+    appState.options.enableThinking = true
+    appState.options.thinkingBudget = 512
+    appState.options.compactReasoningCache = true
+    await appState.applyCurrentOptions()
+    defer {
+      appState.options.enableThinking = false
+      appState.options.compactReasoningCache = false
+    }
+    XCTAssertEqual(appState.resolved?.filterThoughtFromCache, true, "Compact cache not applied")
+
+    let thread = harness.newThread()
+    let turns = [
+      ("What is 17 * 23? Think it through, then give the number.", "391"),
+      ("Add 9 to that result. Reply with the number.", "400"),
+      ("Now divide it by 4. Reply with the number.", "100"),
+    ]
+    var results: [[String: Any]] = []
+    for (prompt, expected) in turns {
+      let exchange = await harness.ask(prompt, in: thread)
+      results.append([
+        "prompt": prompt, "reply": String(exchange.text.prefix(200)),
+        "thoughtLength": exchange.reply?.thought.count ?? 0,
+        "inputTokens": exchange.reply?.stats?.inputTokens ?? -1,
+        "error": appState.generationError ?? "",
+      ])
+      harness.record("e4b_03_compact_cache", ["results": results], in: self)
+      XCTAssertFalse(exchange.text.hasPrefix(ChatTurn.errorPrefix), exchange.text)
+      XCTAssertFalse(exchange.reply?.thought.isEmpty ?? true, "No reasoning streamed: \(prompt)")
+      XCTAssertTrue(exchange.text.contains(expected), "Expected \(expected): \(exchange.text)")
+    }
+  }
 }

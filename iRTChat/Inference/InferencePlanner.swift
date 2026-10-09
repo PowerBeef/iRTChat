@@ -50,8 +50,14 @@ enum ContextBudget {
   /// Bytes per token used for estimates. Gemma averages ~4+ bytes/token on
   /// English; 3 leaves headroom for digits, code, and other scripts.
   static let bytesPerToken = 3.0
-  /// System prompt + tool schemas + chat template, before any turn.
+  /// Tool schemas + chat template + a short system prompt, before any turn.
   static let preambleTokens = 256
+
+  /// Preamble for a conversation with `systemPrompt` (which grows with
+  /// personalization), so long instructions can't overflow the window.
+  static func preambleTokens(systemPrompt: String) -> Int {
+    preambleTokens + estimateTokens(systemPrompt)
+  }
   /// Per-turn template overhead (role markers, separators).
   static let perTurnOverhead = 8
   /// Never fill the window to the last token.
@@ -95,9 +101,11 @@ enum ContextBudget {
   /// Token budget for replayed history after trimming: leave room for the
   /// preamble, the new message, and a reply, and use at most half the window
   /// so the next turns don't immediately trim again.
-  static func historyBudget(maxNumTokens: Int, input: Int, thinkingBudget: Int?) -> Int {
+  static func historyBudget(
+    maxNumTokens: Int, input: Int, thinkingBudget: Int?, preamble: Int = preambleTokens
+  ) -> Int {
     let room =
-      maxNumTokens - preambleTokens - input
+      maxNumTokens - preamble - input
       - replyReserve(maxNumTokens: maxNumTokens, thinkingBudget: thinkingBudget) - safetyMargin
     return max(0, min(maxNumTokens / 2, room))
   }

@@ -225,6 +225,36 @@ final class ChatFlowUITests: XCTestCase {
     XCTAssertFalse(element("chat.editing").exists)
   }
 
+  /// The composer's Think toggle: reasoning streams into an expandable
+  /// card while it's on, and stops when it's turned off.
+  func testThinkToggleShowsReasoning() throws {
+    try openNewChat()
+    let think = element("composer.think")
+    XCTAssertEqual(think.value as? String, "Off")
+    think.tap()
+    XCTAssertEqual(think.value as? String, "On")
+    // Sent right away: the toggle must apply to this message.
+    send("What is 17 × 23? Answer with the number.")
+    try waitForReplyToFinish(timeout: 300)
+    let reasoning = element("message.reasoning")
+    XCTAssertTrue(reasoning.waitForExistence(timeout: 5), "No reasoning card with Think on")
+    reasoning.tap()
+    XCTAssertTrue(
+      element("message.reasoning.text").waitForExistence(timeout: 5), "Reasoning didn't expand")
+    attachScreenshot("reasoning")
+    if !Self.isSimulator {
+      XCTAssertTrue(lastModelText().contains("391"), lastModelText())
+    }
+
+    think.tap()
+    XCTAssertEqual(think.value as? String, "Off")
+    send("Thanks! Reply with one word.")
+    try waitForReplyToFinish(timeout: 120)
+    XCTAssertEqual(
+      app.descendants(matching: .any).matching(identifier: "message.reasoning").count, 1,
+      "Reasoning streamed with Think off")
+  }
+
   /// E4B is the only model: its card (Settings → Models) shows Ready
   /// (device) or Download.
   func testModelsShowTheModel() throws {

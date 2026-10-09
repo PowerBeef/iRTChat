@@ -71,6 +71,10 @@ actor LiteRTChatEngine: ChatEngineProtocol {
   /// Estimated tokens the conversation will prefill before its first send
   /// (preamble + replayed history). `getTokenCount()` reads 0 until then.
   private var pendingSeedTokens = ContextBudget.preambleTokens
+  /// Preamble of the current conversation (its system prompt included).
+  private var preambleTokens: Int {
+    ContextBudget.preambleTokens(systemPrompt: options?.systemPrompt ?? "")
+  }
   /// Multiplier learned from the runtime's exact prefill counts, so byte
   /// estimates track how this model actually tokenizes (never below 1).
   private(set) var estimateCalibration = 1.0
@@ -156,7 +160,7 @@ actor LiteRTChatEngine: ChatEngineProtocol {
           )
           self.engine = engine
           self.conversation = conversation
-          self.pendingSeedTokens = ContextBudget.preambleTokens
+          self.pendingSeedTokens = ContextBudget.preambleTokens(systemPrompt: options.systemPrompt)
           self.resolved = attempt
           self.builtPlan = plan
           self.spec = spec
@@ -303,7 +307,7 @@ actor LiteRTChatEngine: ChatEngineProtocol {
       history: history
     )
     pendingSeedTokens =
-      ContextBudget.preambleTokens
+      preambleTokens
       + ContextBudget.estimateHistory(
         Array(history.suffix(Self.maxReplayedTurns)), calibration: estimateCalibration)
   }
@@ -342,7 +346,7 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     let window = resolved.maxNumTokens
     guard
       ContextBudget.fits(
-        used: ContextBudget.preambleTokens, input: input, maxNumTokens: window,
+        used: preambleTokens, input: input, maxNumTokens: window,
         thinkingBudget: resolved.thinkingBudget)
     else {
       throw ChatError.messageTooLong
@@ -354,7 +358,8 @@ actor LiteRTChatEngine: ChatEngineProtocol {
       return false
     }
     let budget = ContextBudget.historyBudget(
-      maxNumTokens: window, input: input, thinkingBudget: resolved.thinkingBudget)
+      maxNumTokens: window, input: input, thinkingBudget: resolved.thinkingBudget,
+      preamble: preambleTokens)
     let trimmed = ContextBudget.trimmedHistory(
       history, budget: budget, calibration: estimateCalibration)
     Log.engine.info(
@@ -423,7 +428,7 @@ actor LiteRTChatEngine: ChatEngineProtocol {
     conversation = try await Self.makeConversation(
       engine: engine, resolved: resolved, options: options, toolsEnabled: toolsEnabled,
       history: [])
-    pendingSeedTokens = ContextBudget.preambleTokens
+    pendingSeedTokens = preambleTokens
     Log.engine.info(
       "helper: \(output.utf8.count) bytes in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s")
     return Data(output.utf8)
@@ -657,6 +662,7 @@ actor MockChatEngine: ChatEngineProtocol {
     enableTools: Bool
   ) async throws -> ResolvedInference {
     loadCount += 1
+    applyConversationOptions(options)
     loadedModel = nil
     if loadDelay > .zero { try? await Task.sleep(for: loadDelay) }
     loadedModel = spec.id
@@ -693,6 +699,8 @@ actor MockChatEngine: ChatEngineProtocol {
         let script =
           text.localizedCaseInsensitiveContains("markdown")
           ? MockChatEngine.markdownSample : await self.script
+        // Like the real model: reasoning only streams when thinking is on.
+        let thinking = await self.thinkingEnabled
         let stats = await self.stats
         await self.recordSend(text)
         await self.setGenerating(true)
@@ -704,6 +712,8 @@ actor MockChatEngine: ChatEngineProtocol {
             continuation.finish(throwing: ChatError.generationCancelled)
             return
           }
+          var chunk = chunk
+          if !thinking { chunk.thoughtDelta = nil }
           continuation.yield(.chunk(chunk))
         }
         await self.setGenerating(false)
@@ -715,6 +725,13 @@ actor MockChatEngine: ChatEngineProtocol {
 
   private var generating = false
   private(set) var cancelRequested = false
+  private(set) var thinkingEnabled = false
+  /// Test instrumentation: the system prompt of the current conversation.
+  private(set) var systemPrompt = ""
+  func applyConversationOptions(_ options: InferenceOptions) {
+    thinkingEnabled = options.enableThinking
+    systemPrompt = options.systemPrompt
+  }
   /// Test instrumentation: every prompt sent.
   private(set) var sendLog: [String] = []
   private func recordSend(_ text: String) { sendLog.append(text) }

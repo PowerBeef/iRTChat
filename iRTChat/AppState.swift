@@ -35,6 +35,20 @@ final class AppState {
   var enableTools = true {
     didSet { UserDefaults.standard.set(enableTools, forKey: "enableTools") }
   }
+  /// About you / how to respond; merged into the system prompt.
+  var personalization = Personalization() {
+    didSet {
+      UserDefaults.standard.set(try? JSONEncoder().encode(personalization), forKey: "personalization")
+    }
+  }
+
+  /// Options as the engine receives them: the system prompt includes the
+  /// user's personalization.
+  var effectiveOptions: InferenceOptions {
+    var effective = options
+    effective.systemPrompt = personalization.systemPrompt(base: options.systemPrompt)
+    return effective
+  }
   var selectedThreadID: UUID? {
     didSet {
       UserDefaults.standard.set(selectedThreadID?.uuidString, forKey: "selectedThreadID")
@@ -71,6 +85,8 @@ final class AppState {
   @ObservationIgnored private var applyOptionsTask: Task<Void, Never>?
   /// Settings changed mid-reply; applied once the reply finishes.
   @ObservationIgnored private var pendingOptionsApply = false
+  /// A settings change is waiting for its debounced apply.
+  @ObservationIgnored private var optionsDirty = false
 
   private var memoryWarningObserver: NSObjectProtocol?
 
@@ -84,6 +100,11 @@ final class AppState {
       self.options = decoded
     }
     self.enableTools = UserDefaults.standard.object(forKey: "enableTools") as? Bool ?? true
+    if let data = UserDefaults.standard.data(forKey: "personalization"),
+      let decoded = try? JSONDecoder().decode(Personalization.self, from: data)
+    {
+      self.personalization = decoded
+    }
     if let raw = UserDefaults.standard.string(forKey: "selectedThreadID") {
       self.selectedThreadID = UUID(uuidString: raw)
     }
@@ -179,7 +200,7 @@ final class AppState {
     conversationIsEmpty = true
     do {
       let plan = try await engine.load(
-        spec: spec, modelURL: url, options: options,
+        spec: spec, modelURL: url, options: effectiveOptions,
         memoryBytes: DeviceProfile.current.physicalMemoryBytes,
         enableTools: enableTools
       )
@@ -220,6 +241,7 @@ final class AppState {
   /// Settings entry point: coalesces rapid edits (steppers, toggles, text)
   /// into a single apply instead of one engine reload per tap.
   func scheduleApplyOptions() {
+    optionsDirty = true
     applyOptionsTask?.cancel()
     applyOptionsTask = Task {
       try? await Task.sleep(for: .milliseconds(600))
@@ -235,6 +257,7 @@ final class AppState {
   }
 
   private func applyOptionsLocked() async {
+    optionsDirty = false
     // Not loaded: options are picked up by the next load. Never load a
     // multi-GB model just because a setting changed.
     guard await engine.isLoaded else { return }
@@ -242,7 +265,7 @@ final class AppState {
       pendingOptionsApply = true
       return
     }
-    let newOptions = options
+    let newOptions = effectiveOptions
     if let live = engine as? LiteRTChatEngine {
       if await live.engineSettingsChanged(for: newOptions) {
         Log.engine.info("options: engine-level change, full reload")
@@ -260,10 +283,11 @@ final class AppState {
           generationError = (error as? ChatError)?.displayMessage ?? error.localizedDescription
         }
       }
-    } else if engine is MockChatEngine {
+    } else if let mock = engine as? MockChatEngine {
       resolved = InferencePlanner.resolve(
         options: newOptions, model: store.activeModelID,
         memoryBytes: DeviceProfile.current.physicalMemoryBytes)
+      await mock.applyConversationOptions(newOptions)
     }
   }
 
@@ -392,6 +416,12 @@ final class AppState {
     guard !isGenerating, !isBenchmarking else { return false }
     guard let context = modelContext else { return false }
     generationError = nil
+    // A just-changed setting (e.g. the composer's Think toggle) applies to
+    // this message, not after it.
+    if optionsDirty {
+      applyOptionsTask?.cancel()
+      await applyCurrentOptions()
+    }
 
     let threadID = thread.id
     selectedThreadID = threadID

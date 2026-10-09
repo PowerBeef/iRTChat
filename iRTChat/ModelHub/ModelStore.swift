@@ -1,7 +1,8 @@
 import Foundation
 
 /// Downloads and stores `.litertlm` model files in Application Support.
-/// Foreground session with pause/resume; keep the app open while downloading.
+/// Downloads run in a background `URLSession`: they continue when the app
+/// is in the background (or suspended) and support pause/resume.
 @Observable
 @MainActor
 final class ModelStore: NSObject {
@@ -21,7 +22,7 @@ final class ModelStore: NSObject {
   var activeSpec: ModelSpec { ModelCatalog.e4b }
 
   @ObservationIgnored
-  private var session: URLSession!
+  private var session: URLSession { BackgroundDownloads.session }
   @ObservationIgnored
   private var activeTask: URLSessionDownloadTask?
   @ObservationIgnored
@@ -33,11 +34,30 @@ final class ModelStore: NSObject {
     super.init()
     // Retired preference from the two-model era.
     UserDefaults.standard.removeObject(forKey: "activeModelID")
-    let config = URLSessionConfiguration.default
-    config.timeoutIntervalForRequest = 60
-    config.timeoutIntervalForResource = 0 // large files; no total timeout
-    session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    BackgroundDownloads.delegate.store = self
     refreshStates()
+    reattachRunningDownload()
+  }
+
+  /// After a relaunch, a download may still be running in the background
+  /// session: show its progress and keep pause/cancel working.
+  private func reattachRunningDownload() {
+    session.getAllTasks { [weak self] tasks in
+      let running = tasks.compactMap { $0 as? URLSessionDownloadTask }
+        .filter { $0.state == .running || $0.state == .suspended }
+      guard let task = running.first,
+        let id = task.taskDescription.flatMap(ModelID.init(rawValue:))
+      else { return }
+      let expected = task.countOfBytesExpectedToReceive
+      let progress = expected > 0 ? Double(task.countOfBytesReceived) / Double(expected) : 0
+      Task { @MainActor in
+        guard let self, self.downloadingSpec == nil, self.states[id] != .ready else { return }
+        self.downloadingSpec = ModelCatalog.spec(for: id)
+        self.activeTask = task
+        self.states[id] = .downloading(progress: progress)
+        if task.state == .suspended { task.resume() }
+      }
+    }
   }
 
   // MARK: - Paths
@@ -222,12 +242,67 @@ enum ModelStoreError: Error, LocalizedError, Equatable {
   }
 }
 
-// MARK: - URLSessionDownloadDelegate (called off the main actor)
+// MARK: - Background session
 
-extension ModelStore: URLSessionDownloadDelegate {
-  nonisolated func urlSession(
+/// The app's one background download session (its identifier must be
+/// unique per process), forwarding callbacks to the current ``ModelStore``.
+enum BackgroundDownloads {
+  static let identifier = "com.patricedery.irtchat.models"
+
+  static let delegate = DownloadDelegate()
+
+  static let session: URLSession = {
+    let config = URLSessionConfiguration.background(withIdentifier: identifier)
+    config.isDiscretionary = false  // start now, not when iOS sees fit
+    config.sessionSendsLaunchEvents = true
+    config.timeoutIntervalForRequest = 60
+    return URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+  }()
+
+  /// Set by the app delegate when iOS relaunches the app for session events.
+  @MainActor static var completionHandler: (() -> Void)?
+}
+
+final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+  /// The store receiving callbacks (the latest created; only one in the app).
+  weak var store: ModelStore?
+
+  func urlSession(
     _ session: URLSession, downloadTask: URLSessionDownloadTask,
     didFinishDownloadingTo location: URL
+  ) {
+    ModelStore.finishDownload(downloadTask, at: location, store: store)
+  }
+
+  func urlSession(
+    _ session: URLSession, downloadTask: URLSessionDownloadTask,
+    didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+    totalBytesExpectedToWrite: Int64
+  ) {
+    store?.urlSession(
+      session, downloadTask: downloadTask, didWriteData: bytesWritten,
+      totalBytesWritten: totalBytesWritten, totalBytesExpectedToWrite: totalBytesExpectedToWrite)
+  }
+
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    store?.urlSession(session, task: task, didCompleteWithError: error)
+  }
+
+  func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+    Task { @MainActor in
+      BackgroundDownloads.completionHandler?()
+      BackgroundDownloads.completionHandler = nil
+    }
+  }
+}
+
+// MARK: - Download callbacks (called off the main actor)
+
+extension ModelStore {
+  /// Place a finished download. Static: the file must be moved even if no
+  /// store exists yet (the app was relaunched in the background).
+  nonisolated static func finishDownload(
+    _ downloadTask: URLSessionDownloadTask, at location: URL, store: ModelStore?
   ) {
     // Move SYNCHRONOUSLY: the temp file is only guaranteed to exist for the
     // duration of this callback. This runs on the session's background queue.
@@ -247,10 +322,11 @@ extension ModelStore: URLSessionDownloadDelegate {
       placementError = ChatError.underlying(message: "Download finished for an unknown model.")
     }
     // Publish the outcome on the main actor.
-    Task { @MainActor [weak self] in
-      guard let self, let spec else { return }
-      // Only touch state if this task is still the in-flight download.
-      guard self.downloadingSpec?.id == spec.id else { return }
+    Task { @MainActor [weak store] in
+      guard let self = store, let spec else { return }
+      // Only touch state if this task is still the in-flight download (or
+      // none is tracked yet, right after a relaunch).
+      guard self.downloadingSpec == nil || self.downloadingSpec?.id == spec.id else { return }
       self.resumeData[spec.id] = nil
       self.activeTask = nil
       self.downloadingSpec = nil

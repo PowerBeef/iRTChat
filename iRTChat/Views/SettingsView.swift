@@ -15,6 +15,7 @@ struct SettingsView: View {
     NavigationStack {
       Form {
         statusSection
+        personalizationSection
         modelSection
         performanceSection
         reasoningSection
@@ -102,6 +103,28 @@ struct SettingsView: View {
   }
 
   // MARK: - Sections
+
+  private var personalizationSection: some View {
+    Section {
+      NavigationLink {
+        PersonalizationView()
+      } label: {
+        LabeledContent {
+          Text(personalizationSummary)
+        } label: {
+          Label("Personalization", systemImage: "person.crop.circle")
+        }
+      }
+      .accessibilityIdentifier("settings.personalization")
+    }
+  }
+
+  private var personalizationSummary: String {
+    let p = appState.personalization
+    guard p.enabled else { return String(localized: "Off") }
+    let customized = !p.name.isEmpty || !p.aboutYou.isEmpty || !p.instructions.isEmpty
+    return customized ? p.style.displayName : String(localized: "Not set")
+  }
 
   private var modelSection: some View {
     Section {

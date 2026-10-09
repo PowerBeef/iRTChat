@@ -17,6 +17,10 @@ struct ContentView: View {
   @State private var renaming: ChatThread?
   @State private var renameText = ""
   @State private var deleting: ChatThread?
+  @AppStorage("onboardingDone") private var onboardingDone = false
+  /// Decided once at launch, so finishing the download doesn't dismiss the
+  /// welcome screen before "Start chatting".
+  @State private var presentOnboarding = false
 
   private var currentThread: ChatThread? {
     guard let id = appState.selectedThreadID else { return nil }
@@ -61,10 +65,18 @@ struct ContentView: View {
       }
       .simultaneousGesture(drawerDrag(width: width))
     }
-    .task { appState.pruneEmptyThreads() }
+    .task {
+      appState.pruneEmptyThreads()
+      presentOnboarding = OnboardingView.shouldShow(
+        done: onboardingDone, isMock: appState.isMock,
+        downloaded: appState.store.activeSpecDownloaded)
+    }
     .onChange(of: appState.selectedThreadID) { appState.pruneEmptyThreads() }
     .sheet(isPresented: $showSettings) {
       SettingsView()
+    }
+    .fullScreenCover(isPresented: $presentOnboarding, onDismiss: { onboardingDone = true }) {
+      OnboardingView { presentOnboarding = false }
     }
     .alert("Rename chat", isPresented: isRenaming) {
       TextField("Title", text: $renameText)

@@ -60,3 +60,12 @@ final class ThreadGroupingTests: XCTestCase {
     XCTAssertTrue(snippet.contains("needle"))
   }
 }
+
+final class OnboardingTests: XCTestCase {
+  func testShownOnlyOnFirstLaunchWithoutAModel() {
+    XCTAssertTrue(OnboardingView.shouldShow(done: false, isMock: false, downloaded: false))
+    XCTAssertFalse(OnboardingView.shouldShow(done: true, isMock: false, downloaded: false))
+    XCTAssertFalse(OnboardingView.shouldShow(done: false, isMock: false, downloaded: true))
+    XCTAssertFalse(OnboardingView.shouldShow(done: false, isMock: true, downloaded: false))
+  }
+}

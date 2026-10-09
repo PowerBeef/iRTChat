@@ -8,7 +8,7 @@ import XCTest
 /// scripted mock engine with an in-memory store.
 @MainActor
 final class AppStateTests: XCTestCase {
-  private static let defaultsKeys = ["selectedThreadID", "inferenceOptions"]
+  private static let defaultsKeys = ["selectedThreadID", "inferenceOptions", "personalization"]
   private var savedDefaults: [String: Any] = [:]
   private var container: ModelContainer!
   private var appState: AppState!
@@ -219,5 +219,33 @@ final class AppStateTests: XCTestCase {
     await appState.applyCurrentOptions()
     let loads = await mock.loadCount
     XCTAssertEqual(loads, 0)
+  }
+
+  // MARK: - Personalization
+
+  func testPersonalizationReachesTheModelsSystemPrompt() async {
+    appState.personalization.name = "Patrice"
+    await appState.ensureEngineLoaded()
+    var prompt = await mock.systemPrompt
+    XCTAssertTrue(prompt.contains("The user's name is Patrice."), prompt)
+    XCTAssertTrue(prompt.hasPrefix(appState.options.systemPrompt))
+
+    appState.personalization.instructions = "Answer in French."
+    await appState.applyCurrentOptions()
+    prompt = await mock.systemPrompt
+    XCTAssertTrue(prompt.contains("Answer in French."), prompt)
+    // Stored separately: the base prompt setting is unchanged.
+    XCTAssertFalse(appState.options.systemPrompt.contains("Patrice"))
+  }
+
+  func testThinkToggleAppliesToTheVeryNextMessage() async {
+    let thread = appState.newThread(in: context)
+    await appState.send(text: "Hi", imageData: nil, audioFileURL: nil, in: thread)
+    XCTAssertTrue(thread.orderedTurns.last?.thought.isEmpty ?? false, "Thinking is off by default")
+    // As the composer does: toggle, schedule, and send before the debounce fires.
+    appState.options.enableThinking = true
+    appState.scheduleApplyOptions()
+    await appState.send(text: "Again", imageData: nil, audioFileURL: nil, in: thread)
+    XCTAssertFalse(thread.orderedTurns.last?.thought.isEmpty ?? true, "Think didn't apply in time")
   }
 }
