@@ -14,13 +14,8 @@ struct iRTChatApp: App {
     let env = ProcessInfo.processInfo.environment
     let useMock = args.contains("--mock-engine") || env["IRT_MOCK_ENGINE"] != nil
 
-    let schema = Schema([ChatThread.self, ChatTurn.self])
-    let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-    do {
-      container = try ModelContainer(for: schema, configurations: [configuration])
-    } catch {
-      fatalError("Could not create ModelContainer: \(error)")
-    }
+    let opened = ChatStoreLoader.open()
+    container = opened.container
 
     // `--uitest-reset`: start UI tests from a clean slate (no chats, default
     // settings). Downloaded models are kept.
@@ -37,6 +32,7 @@ struct iRTChatApp: App {
     // Must be the same context the views use (`.modelContainer` injects
     // mainContext): turns are appended to view-owned threads, then saved here.
     state.modelContext = container.mainContext
+    if let notice = opened.recoveryNotice { state.generationError = notice }
     _appState = State(initialValue: state)
   }
 

@@ -1,34 +1,40 @@
 import Foundation
 import SwiftData
 
-/// One chat session with a fixed model.
-@Model
-final class ChatThread {
-  var id: UUID
-  var title: String
-  var createdAt: Date
-  var modelIDRaw: String
-  @Relationship(deleteRule: .cascade, inverse: \ChatTurn.thread)
-  var turns: [ChatTurn] = []
+/// The current schema's models (see `Schema/` and ``ChatMigrationPlan``).
+typealias ChatThread = SchemaV2.ChatThread
+typealias ChatTurn = SchemaV2.ChatTurn
 
-  init(title: String = "New chat", modelID: ModelID = .e2b) {
-    self.id = UUID()
-    self.title = title
-    self.createdAt = Date()
-    self.modelIDRaw = modelID.rawValue
-  }
+/// Schema for the app's container.
+enum ChatStore {
+  static var schema: Schema { Schema(versionedSchema: SchemaV2.self) }
+}
 
+// MARK: - Thread: branches
+
+extension SchemaV2.ChatThread {
   var modelID: ModelID {
     get { ModelID(rawValue: modelIDRaw) ?? .e2b }
     set { modelIDRaw = newValue.rawValue }
   }
 
+  /// The visible branch, oldest first. Threads without an active leaf (legacy
+  /// or freshly built in tests) fall back to creation order.
   var orderedTurns: [ChatTurn] {
-    turns.sorted { $0.createdAt < $1.createdAt }
+    guard let activeLeafID else { return turns.sorted { $0.createdAt < $1.createdAt } }
+    let byID = Dictionary(turns.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    var path: [ChatTurn] = []
+    var cursor = byID[activeLeafID]
+    var seen = Set<UUID>()
+    while let turn = cursor, seen.insert(turn.id).inserted {
+      path.append(turn)
+      cursor = turn.parentID.flatMap { byID[$0] }
+    }
+    return path.reversed()
   }
 
-  /// Text history for re-seeding the native conversation. Skips empty turns
-  /// and failed replies (persisted as "Error: …"), which the model never said.
+  /// Text history of the visible branch for re-seeding the model. Skips empty
+  /// turns and failed replies (persisted as "Error: …").
   var textHistory: [(role: ChatRole, text: String)] {
     orderedTurns.compactMap { turn in
       guard !turn.text.isEmpty else { return nil }
@@ -36,40 +42,57 @@ final class ChatThread {
       return (turn.chatRole, turn.text)
     }
   }
-}
 
-/// One user or model message, with optional reasoning, tools, stats, image.
-@Model
-final class ChatTurn {
-  var id: UUID
-  var roleRaw: String
-  var text: String
-  var thought: String
-  var toolNames: [String]
-  var statsData: Data?
-  @Attribute(.externalStorage)
-  var imageData: Data?
-  /// The user sent a voice message (the audio itself is not stored).
-  var hasAudio: Bool = false
-  var createdAt: Date
-  var thread: ChatThread?
-
-  init(
-    role: ChatRole, text: String = "", thought: String = "",
-    toolNames: [String] = [], stats: GenerationStats? = nil,
-    imageData: Data? = nil, hasAudio: Bool = false
-  ) {
-    self.hasAudio = hasAudio
-    self.id = UUID()
-    self.roleRaw = role == .user ? "user" : "model"
-    self.text = text
-    self.thought = thought
-    self.toolNames = toolNames
-    self.statsData = stats.flatMap { try? JSONEncoder().encode($0) }
-    self.imageData = imageData
-    self.createdAt = Date()
+  /// Continue the visible branch with `turn` and make it the active leaf.
+  func append(_ turn: ChatTurn) {
+    if activeLeafID == nil, !turns.isEmpty {
+      // Legacy linear thread: adopt creation order first.
+      ChatMigrationPlan.linkLinearHistory(self)
+    }
+    attach(turn, parentID: activeLeafID)
   }
 
+  /// Add `turn` as an alternative version of `original` (edit or
+  /// regenerate): same parent, new branch, made active.
+  func addVersion(_ turn: ChatTurn, of original: ChatTurn) {
+    attach(turn, parentID: original.parentID)
+  }
+
+  private func attach(_ turn: ChatTurn, parentID: UUID?) {
+    turn.parentID = parentID
+    turns.append(turn)
+    activeLeafID = turn.id
+    updatedAt = Date()
+  }
+
+  /// Turns sharing `turn`'s parent and role (its alternative versions),
+  /// oldest first. Contains `turn` itself.
+  func siblings(of turn: ChatTurn) -> [ChatTurn] {
+    turns
+      .filter { $0.parentID == turn.parentID && $0.roleRaw == turn.roleRaw }
+      .sorted { $0.createdAt < $1.createdAt }
+  }
+
+  /// Show the branch through `turn`, continuing down its most recent replies.
+  func selectBranch(through turn: ChatTurn) {
+    var leaf = turn
+    while let next = turns.filter({ $0.parentID == leaf.id }).max(by: { $0.createdAt < $1.createdAt })
+    {
+      leaf = next
+    }
+    activeLeafID = leaf.id
+  }
+
+  /// Detach `turn` (a leaf) from the visible branch before deleting it.
+  func removeLeaf(_ turn: ChatTurn) {
+    if activeLeafID == turn.id { activeLeafID = turn.parentID }
+    turns.removeAll { $0.id == turn.id }
+  }
+}
+
+// MARK: - Turn
+
+extension SchemaV2.ChatTurn {
   /// Prefix of model turns that record a failed generation.
   static let errorPrefix = "Error: "
 
@@ -83,4 +106,40 @@ final class ChatTurn {
     }
     set { statsData = newValue.flatMap { try? JSONEncoder().encode($0) } }
   }
+
+  var parts: MessageParts {
+    get {
+      guard let partsData, let decoded = try? JSONDecoder().decode(MessageParts.self, from: partsData)
+      else { return MessageParts() }
+      return decoded
+    }
+    set { partsData = newValue.isEmpty ? nil : try? JSONEncoder().encode(newValue) }
+  }
+}
+
+// MARK: - Message parts
+
+/// Structured, non-text content of a turn.
+struct MessageParts: Codable, Equatable, Sendable {
+  /// Tools that ran while producing this reply, in order.
+  var toolActivity: [ToolActivityRecord] = []
+  /// Sources cited by this reply (web pages, files), numbered from 1.
+  var sources: [SourceRecord] = []
+
+  var isEmpty: Bool { toolActivity.isEmpty && sources.isEmpty }
+}
+
+struct ToolActivityRecord: Codable, Equatable, Sendable {
+  var name: String
+  /// Short, user-facing description ("Searched the web for …").
+  var summary: String
+}
+
+struct SourceRecord: Codable, Equatable, Sendable, Identifiable {
+  var id: Int { index }
+  /// Citation number shown as [n].
+  var index: Int
+  var title: String
+  var url: String?
+  var snippet: String?
 }

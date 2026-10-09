@@ -4,7 +4,7 @@ import SwiftUI
 struct ThreadListView: View {
   @Environment(AppState.self) private var appState
   @Environment(\.modelContext) private var context
-  @Query(sort: \ChatThread.createdAt, order: .reverse) private var threads: [ChatThread]
+  @Query(sort: \ChatThread.updatedAt, order: .reverse) private var threads: [ChatThread]
   @State private var path: [ChatThread] = []
 
   var body: some View {
@@ -70,7 +70,7 @@ struct ThreadListView: View {
 
   private func subtitle(for thread: ChatThread) -> String {
     let model = ModelCatalog.spec(for: thread.modelID).displayName
-    let count = thread.turns.count
+    let count = thread.orderedTurns.count
     let messages = count == 1 ? "1 message" : "\(count) messages"
     let date = thread.createdAt.formatted(date: .abbreviated, time: .omitted)
     return "\(model) · \(messages) · \(date)"

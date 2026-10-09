@@ -381,13 +381,13 @@ final class AppState {
     // Persist the user turn.
     let userTurn = ChatTurn(
       role: .user, text: prompt, imageData: imageData, hasAudio: audioFileURL != nil)
-    thread.turns.append(userTurn)
+    thread.append(userTurn)
     if thread.title == "New chat" {
       thread.title = Self.title(prompt: prompt, hasImage: imageData != nil)
     }
     // Placeholder model turn, mutated live as chunks stream in.
     let reply = ChatTurn(role: .model)
-    thread.turns.append(reply)
+    thread.append(reply)
     try? context.save()
 
     isGenerating = true
@@ -444,7 +444,10 @@ final class AppState {
     } catch let error as ChatError {
       flush()
       if case .generationCancelled = error {
-        if reply.text.isEmpty { context.delete(reply) }
+        if reply.text.isEmpty {
+          reply.thread?.removeLeaf(reply)
+          context.delete(reply)
+        }
         try? context.save()
         // LiteRT-LM leaves a cancelled conversation unusable: rebuild it from
         // the thread's history (incl. the partial reply) before the next send.
