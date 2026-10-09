@@ -62,17 +62,6 @@ final class InferencePlannerTests: XCTestCase {
     XCTAssertNil(resolved.visualTokenBudget)
   }
 
-  func testCpuFallbackKeepsEverythingElse() {
-    let plan = InferencePlanner.resolve(
-      options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
-    let fallback = InferencePlanner.cpuFallback(from: plan)
-    XCTAssertTrue(plan.useGPU)
-    XCTAssertFalse(fallback.useGPU)
-    XCTAssertEqual(fallback.maxNumTokens, plan.maxNumTokens)
-    XCTAssertEqual(fallback.visualTokenBudget, plan.visualTokenBudget)
-    XCTAssertEqual(fallback.thinkingBudget, plan.thinkingBudget)
-  }
-
   func testAttemptLadderPrefersGPUMultimodal() {
     let plan = InferencePlanner.resolve(
       options: InferenceOptions(), model: .e2b, memoryBytes: roomy)

@@ -9,7 +9,6 @@ final class ModelStore: NSObject {
     case notDownloaded
     case downloading(progress: Double)
     case paused(progress: Double)
-    case verifying
     case ready
     case failed(message: String)
   }

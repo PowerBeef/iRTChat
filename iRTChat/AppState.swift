@@ -42,6 +42,9 @@ final class AppState {
   }
 
   var isGenerating = false
+  /// The chat whose reply is streaming (only it shows the live cursor and
+  /// can't be deleted mid-reply).
+  var generatingThreadID: UUID?
   var generationError: String?
   var isBenchmarking = false
   var benchmarkReport: BenchmarkReport? {
@@ -388,6 +391,7 @@ final class AppState {
     try? context.save()
 
     isGenerating = true
+    generatingThreadID = thread.id
     engineState = .generating
     conversationIsEmpty = false
 
@@ -395,6 +399,7 @@ final class AppState {
     await consume(stream, into: reply, context: context)
 
     isGenerating = false
+    generatingThreadID = nil
     engineState = .ready
     if pendingOptionsApply {
       pendingOptionsApply = false
@@ -412,22 +417,32 @@ final class AppState {
   private func consume(
     _ stream: AsyncThrowingStream<ChatEvent, Error>, into reply: ChatTurn, context: ModelContext
   ) async {
+    // Stream into a plain accumulator and publish to the SwiftData model at
+    // ~10 Hz: per-token model writes re-render (and re-parse markdown for)
+    // the whole bubble 40-100 times a second.
+    var accumulator = StreamAccumulator()
+    var lastFlush = ContinuousClock.now
+    func flush() {
+      reply.text = accumulator.text
+      reply.thought = accumulator.thought
+      if reply.toolNames != accumulator.toolNames { reply.toolNames = accumulator.toolNames }
+      lastFlush = .now
+    }
     do {
       for try await event in stream {
         switch event {
         case .chunk(let chunk):
-          reply.text += chunk.textDelta
-          if let thought = chunk.thoughtDelta { reply.thought += thought }
-          for name in chunk.toolNames where !reply.toolNames.contains(name) {
-            reply.toolNames.append(name)
-          }
+          accumulator.append(chunk)
+          if ContinuousClock.now - lastFlush >= .milliseconds(100) { flush() }
         case .finished(let stats):
           reply.stats = stats
         }
       }
+      flush()
       try? context.save()
       Haptics.complete()
     } catch let error as ChatError {
+      flush()
       if case .generationCancelled = error {
         if reply.text.isEmpty { context.delete(reply) }
         try? context.save()
@@ -440,6 +455,7 @@ final class AppState {
         Haptics.error()
       }
     } catch {
+      flush()
       reply.text = reply.text.isEmpty ? ChatTurn.errorPrefix + error.localizedDescription : reply.text
       try? context.save()
       Haptics.error()

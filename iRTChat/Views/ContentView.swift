@@ -7,7 +7,7 @@ struct ContentView: View {
     TabView {
       ThreadListView()
         .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
-      ModelLibraryView()
+      NavigationStack { ModelLibraryView() }
         .tabItem { Label("Models", systemImage: "internaldrive") }
         .badge(downloadBadge)
       SettingsView()

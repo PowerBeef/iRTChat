@@ -36,6 +36,7 @@ final class AudioRecorder: NSObject {
     autoStopTask = nil
     timer?.invalidate()
     timer = nil
+    if let recorder { elapsed = recorder.currentTime }
     recorder?.stop()
     finishedURL = recorder?.url
     recorder = nil
@@ -70,10 +71,18 @@ final class AudioRecorder: NSObject {
       try AVAudioSession.sharedInstance().setActive(true)
       let recorder = try AVAudioRecorder(url: url, settings: settings)
       self.recorder = recorder
-      recorder.record()
+      guard recorder.record() else {
+        self.recorder = nil
+        try? AVAudioSession.sharedInstance().setActive(false)
+        errorMessage = "Couldn't start recording."
+        return
+      }
       isRecording = true
       timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-        Task { @MainActor in self?.elapsed += 0.25 }
+        // Read the recorder's clock (a counted timer drifts under load).
+        Task { @MainActor in
+          if let self, let recorder = self.recorder { self.elapsed = recorder.currentTime }
+        }
       }
       autoStopTask = Task { [weak self] in
         try? await Task.sleep(for: .seconds(Self.maxDuration))

@@ -13,14 +13,14 @@ struct ChatView: View {
   @FocusState private var inputFocused: Bool
   @Namespace private var inputNamespace
 
-  private var turns: [ChatTurn] { thread.orderedTurns }
-
   var body: some View {
+    // Sorted once per render (not per use: this re-renders while streaming).
+    let turns = thread.orderedTurns
     VStack(spacing: 0) {
       mismatchBanner
       engineBanner
       noticeBanner
-      messagesList
+      messagesList(turns)
       pendingBar
       inputBar
     }
@@ -35,6 +35,9 @@ struct ChatView: View {
       Button("OK", role: .cancel) {}
     } message: {
       Text("Enable microphone access in Settings to send voice messages.")
+    }
+    .onChange(of: recorder.errorMessage) { _, message in
+      if let message { appState.generationError = "Recording failed: \(message)" }
     }
     .task(id: thread.id) {
       await appState.activate(thread)
@@ -144,7 +147,7 @@ struct ChatView: View {
 
   // MARK: - Messages
 
-  private var messagesList: some View {
+  private func messagesList(_ turns: [ChatTurn]) -> some View {
     Group {
       if turns.isEmpty {
         emptyState
@@ -153,14 +156,14 @@ struct ChatView: View {
           ScrollView {
             LazyVStack(spacing: DS.spaceLG) {
               ForEach(turns) { turn in
-                MessageBubbleView(turn: turn, isStreaming: isLiveBubble(turn))
+                MessageBubbleView(turn: turn, isStreaming: isLiveBubble(turn, in: turns))
                   .id(turn.id)
               }
               Color.clear.frame(height: 1).id("bottom")
             }
             .padding()
           }
-          .onChange(of: scrollSignature) {
+          .onChange(of: scrollSignature(turns)) {
             withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
           }
         }
@@ -223,13 +226,13 @@ struct ChatView: View {
     send()
   }
 
-  private var scrollSignature: String {
+  private func scrollSignature(_ turns: [ChatTurn]) -> String {
     let last = turns.last
     return "\(turns.count)-\(last?.text.count ?? 0)-\(last?.thought.count ?? 0)"
   }
 
-  private func isLiveBubble(_ turn: ChatTurn) -> Bool {
-    appState.isGenerating && turn.id == turns.last?.id && !turn.isUser
+  private func isLiveBubble(_ turn: ChatTurn, in turns: [ChatTurn]) -> Bool {
+    appState.generatingThreadID == thread.id && turn.id == turns.last?.id && !turn.isUser
   }
 
   // MARK: - Pending attachments

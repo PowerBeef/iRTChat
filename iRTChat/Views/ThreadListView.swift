@@ -40,6 +40,8 @@ struct ThreadListView: View {
                 .padding(.vertical, 2)
               }
               .accessibilityIdentifier("threads.row")
+              // Its reply is still being written into this chat.
+              .deleteDisabled(appState.generatingThreadID == thread.id)
             }
             .onDelete(perform: delete)
           }

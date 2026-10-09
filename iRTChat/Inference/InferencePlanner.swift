@@ -261,13 +261,6 @@ enum InferencePlanner {
     return out
   }
 
-  /// CPU fallback used when GPU initialization fails: same settings on CPU.
-  static func cpuFallback(from resolved: ResolvedInference) -> ResolvedInference {
-    var copy = resolved
-    copy.useGPU = false
-    return copy
-  }
-
   /// Ordered engine-init attempts: preferred backend first, then the other;
   /// multimodal before text-only on each. Duplicates removed (e.g. when the
   /// options already disable multimodal, or CPU is preferred).

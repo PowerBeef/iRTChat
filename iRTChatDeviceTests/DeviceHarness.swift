@@ -134,7 +134,7 @@ final class DeviceHarness {
           lastLoggedPercent = percent
           Log.lifecycle.info("harness download \(spec.id.rawValue, privacy: .public) \(percent)%")
         }
-      case .notDownloaded, .verifying:
+      case .notDownloaded:
         break
       }
       if Date().timeIntervalSince(started) > timeout {

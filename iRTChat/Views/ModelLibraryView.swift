@@ -3,26 +3,26 @@ import SwiftUI
 struct ModelLibraryView: View {
   @Environment(AppState.self) private var appState
 
+  /// Hosts must provide the NavigationStack (the Models tab wraps it; the
+  /// chat screen pushes it onto its own stack).
   var body: some View {
-    NavigationStack {
-      ScrollView {
-        LazyVStack(spacing: DS.spaceLG) {
-          ForEach(ModelCatalog.all) { spec in
-            ModelCardView(spec: spec)
-          }
-          Text(
-            "Models download from Hugging Face (litert-community) and stay on-device. Keep the app open while downloading."
-          )
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.top, 4)
+    ScrollView {
+      LazyVStack(spacing: DS.spaceLG) {
+        ForEach(ModelCatalog.all) { spec in
+          ModelCardView(spec: spec)
         }
-        .padding()
+        Text(
+          "Models download from Hugging Face (litert-community) and stay on-device. Keep the app open while downloading."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 4)
       }
-      .navigationTitle("Models")
-      .onAppear { appState.store.refreshStates() }
+      .padding()
     }
+    .navigationTitle("Models")
+    .onAppear { appState.store.refreshStates() }
   }
 }
 
@@ -105,11 +105,6 @@ private struct ModelCardView: View {
           .controlSize(.small)
         Spacer()
         Text("\(Int(progress * 100))%").font(.caption).foregroundStyle(.secondary)
-      }
-    case .verifying:
-      HStack {
-        ProgressView().controlSize(.small)
-        Text("Verifying…").font(.caption)
       }
     case .ready:
       HStack {
