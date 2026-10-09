@@ -1,129 +1,239 @@
+<div align="center">
+
 # iRTChat
 
-A native iPhone chat app that runs **Gemma 4** entirely on-device via Google's **LiteRT-LM** — with GPU acceleration, streaming replies, reasoning view, image + voice input, and offline tools. No accounts, no API keys, no cloud.
+**Private, on-device AI chat for iPhone — powered by Gemma 4 and LiteRT-LM.**
 
-## Features
+No accounts. No API keys. No cloud. After a one-time model download, every conversation stays on your phone.
 
-- **Fully on-device** — models download once, then everything runs offline
-- **Gemma 4 E2B** (~2.6 GB multimodal) by default, **E4B** (~3.7 GB) when the app's memory limit allows it
-- **Streaming replies** with per-message stats (TTFT, prefill/decode tok/s, backend)
-- **Thinking mode** — reasoning streams into a collapsible card under each reply
-- **Multimodal** — attach photos, record voice notes, adjust image detail
-- **On-device tools** — the assistant can check the time and calculate
-- **Liquid Glass UI** — native SwiftUI with refined glass surfaces and haptics
-- **Chat history** persisted locally with SwiftData
+![iOS 27](https://img.shields.io/badge/iOS-27-black?logo=apple)
+![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
+![SwiftUI](https://img.shields.io/badge/UI-SwiftUI-0A84FF)
+![LiteRT-LM 0.18.0](https://img.shields.io/badge/LiteRT--LM-0.18.0-4285F4)
+![Gemma 4](https://img.shields.io/badge/Model-Gemma%204-8E75FF)
+
+</div>
+
+---
+
+## Contents
+
+- [Highlights](#highlights)
+- [Requirements](#requirements)
+- [Getting started](#getting-started)
+- [Models](#models)
+- [Architecture](#architecture)
+- [Reliability](#reliability)
+- [Performance](#performance)
+- [Testing](#testing)
+- [Project structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [Known limitations](#known-limitations)
+- [Vendored LiteRT-LM](#vendored-litert-lm)
+- [Acknowledgements](#acknowledgements)
+
+## Highlights
+
+| | |
+| --- | --- |
+| **Fully on-device** | Gemma 4 runs locally on the GPU (Metal) with automatic CPU fallback. Works offline after the first download. |
+| **Streaming replies** | Tokens stream live, with per-reply stats: time to first token, decode speed, and backend. |
+| **Reasoning** | Optional thinking mode streams the model's reasoning into a collapsible card under each reply. |
+| **Multimodal** | Attach photos (with adjustable image detail) and record voice messages up to 30 seconds. |
+| **On-device tools** | The model can check the current date and time and evaluate arithmetic, without leaving the phone. |
+| **Speculative decoding** | Multi-token prediction (MTP) speeds up decoding when the model file ships a drafter. |
+| **Chat history** | Conversations persist locally with SwiftData; each chat keeps its own context. |
+| **Native design** | SwiftUI with Liquid Glass surfaces, haptics, and accessibility identifiers throughout. |
 
 ## Requirements
 
-- Mac with Xcode 27+ and an iOS 27 simulator
-- A physical iPhone on iOS 27 for real inference (the simulator has no Metal LLM path)
-- ~3 GB free for E2B, ~4 GB for E4B
-- Network only for the first launch (model download) — chat itself is offline
+| | |
+| --- | --- |
+| **Development** | Mac with Xcode 27 and the iOS 27 SDK |
+| **Inference** | A physical iPhone on iOS 27 — the simulator has no Metal LLM path and runs a scripted mock engine instead |
+| **Storage** | ~3 GB free for E2B, ~4 GB for E4B |
+| **Signing** | An Apple Developer account with the **Extended Virtual Addressing** and **Increased Memory Limit** capabilities |
+| **Network** | Only to download a model |
 
 ## Getting started
 
-### Smoke-test the UI without a model (simulator)
+### Run on an iPhone
 
-```sh
-open iRTChat.xcodeproj
-```
+1. Open `iRTChat.xcodeproj`.
+2. The project is configured for team `FK2D8X36G2` and bundle ID `com.patricedery.irtchat`. On another account, change both under **Signing & Capabilities**.
+3. Select the `iRTChat` scheme and your iPhone, then run. Use the **Release** configuration for representative speed.
+4. Open the **Models** tab and download **Gemma 4 E2B**. Keep the app in the foreground until the download finishes.
+5. Start a chat from the **Chat** tab.
 
-Select the `iRTChat` scheme and an iPhone simulator, then Run with the `--mock-engine` launch argument (Scheme → Run → Arguments). The scripted mock engine drives the full UI: threads, streaming bubbles, reasoning cards, settings.
+> [!NOTE]
+> Automatic signing registers the required capabilities from `iRTChat/iRTChat.entitlements`. If signing fails with *"PLA Update available"*, accept the latest Program License Agreement at [developer.apple.com/account](https://developer.apple.com/account).
 
-> Never double-click the built `.app` in Finder — simulator builds only run inside the iOS Simulator or via `xcodebuild`.
+### Explore the UI in the simulator
 
-### Real inference (physical iPhone)
+Run the `iRTChat` scheme on any iPhone simulator with the `--mock-engine` launch argument (**Product → Scheme → Edit Scheme → Run → Arguments**). A scripted engine drives the full interface — chats, streaming bubbles, reasoning cards, and settings — without downloading a model.
 
-1. Open `iRTChat.xcodeproj`. The project is set up for team `FK2D8X36G2` and bundle id `com.patricedery.irtchat`; on another account, change both.
-2. Run the `iRTChat` scheme on your iPhone (use Release for best speed). Signing needs the **Extended Virtual Addressing** and **Increased Memory Limit** capabilities (`iRTChat/iRTChat.entitlements`); automatic signing registers them, after the account has accepted the current Program License Agreement.
-3. In the **Models** tab, download **Gemma 4 E2B** (keep the app open while downloading).
-4. Chat. Try **Thinking**, attach a photo, or record a voice note.
+## Models
 
-Models come from Hugging Face (`litert-community`, ungated, Apache-2.0) with pause/resume and size verification, and live in Application Support.
+| Model | Size | Use | Gating |
+| --- | --- | --- | --- |
+| **Gemma 4 E2B** | 2.6 GB | Default. Text, vision, audio, reasoning. | Any supported iPhone |
+| **Gemma 4 E4B** | 3.7 GB | Higher quality. | App memory limit of at least 4.5 GB |
 
-### Tests
+Models are the multimodal `.litertlm` builds from Hugging Face ([`litert-community`](https://huggingface.co/litert-community)). Downloads support pause and resume, are size- and HTTP-status-verified, check free space first, and are stored in Application Support, excluded from iCloud backup.
 
-| Target | Runs on | Covers |
-| --- | --- | --- |
-| `iRTChatTests` | Simulator or device | Pure logic and the app pipeline through the mock engine: planner, device gating, calculator, catalog, download store, engine lifecycle (load coalescing, thread ↔ conversation binding) |
-| `iRTChatDeviceTests` | Physical iPhone only (skips on simulator) | The real LiteRT-LM engine in-process: model download, load ladder, text, chat isolation, Stop, tools, thinking, image, audio, settings round-trip, context limit, benchmark. `E4BScenarioTests` is opt-in (`HARNESS_E4B=1`). |
-| `iRTChatUITests` | Device (real model) or simulator (mock engine) | Real taps: send, Stop, Home button mid-reply, leave/return mid-reply, rapid Settings edits, Models tab |
+### Settings
 
-Fast loop (simulator): run the scheme's tests with `-only-testing:iRTChatTests`.
-
-On-device harness (physical iPhone, Debug build, model downloaded automatically):
-
-```sh
-scripts/device-harness.sh inference   # in-app engine scenarios
-scripts/device-harness.sh ui          # real-tap flows
-scripts/device-harness.sh e4b         # opt-in E4B (3.7 GB)
-DEVICE_ID=<udid> scripts/device-harness.sh all
-```
-
-Results land in `build/device-harness/`: the `.xcresult` bundles, exported attachments (per-scenario JSON metrics and screenshots), and `harness-report.json` pulled from the app's Documents folder. The app logs under subsystem `com.patricedery.irtchat` (categories `engine`, `generation`, `lifecycle`). If a run fails with "Failed to create a bundle instance … iRTChatDeviceTests.xctest", the phone has a stale install from before that target existed: `xcrun devicectl device uninstall app --device <udid> com.patricedery.irtchat` and rerun (this also deletes downloaded models). MobileBuildMCP users can switch to the `device-tests` profile in `.mobilebuildmcp/config.yaml` and call `test_device`.
-
-## Performance
-
-- **Speculative decoding (MTP)** — up to ~2x faster decode, enabled only when the model file ships a drafter
-- **Model introspection** — MTP, vision/audio, visual-token budget, and KV limits are clamped to each file's stated capabilities. The thinking and function-calling flags are *not* trusted: Gemma 4 E2B reports both as unsupported, yet reasons and calls tools on device.
-- **Context-window management** — every send fits the KV cache: cached tokens are measured, the new message is estimated (and calibrated against exact counts), older turns are trimmed when needed, and each reply is capped to the remaining room. Overflowing the cache corrupts LiteRT-LM's native heap.
-- **Engine validation** — each new engine runs a one-token generation before use; LiteRT-LM can report a successful load after failing to map model sections.
-- **Persistent GPU cache** so compiled kernels survive restarts and warm starts stay fast
-- **Optional reasoning-cache compaction** for longer effective context (Settings → Performance)
-- **On-device benchmark** (Settings → Benchmark, 1024 prefill / 256 decode) to compare against Google's published numbers
-- GPU (Metal) first with automatic CPU fallback; vision/audio executors on CPU per Google's iOS guidance
-
-Measured on iPhone 17 Pro (12 GB, iOS 27, Debug build of the app; inference runs in the prebuilt optimized runtime): E2B loads in ~1–2 s warm, time to first token ~0.2–0.3 s, decode ~40–80 tok/s in chat; E4B decodes ~50 tok/s. Benchmark (1024/256) prefill ~3.9–5.0K tok/s; decode varies with device temperature (25–62 tok/s).
+| Section | Options |
+| --- | --- |
+| **Performance** | GPU or CPU backend · speculative decoding (MTP) · compact reasoning cache |
+| **Reasoning & Memory** | Thinking on/off and token budget · automatic or manual KV-cache size |
+| **Sampling** | Precise (temperature 0.2) · Balanced (0.7) · Creative (1.0) |
+| **Voice & Vision** | Image and audio input · image detail (140 / 280 / 560 visual tokens) |
+| **System Prompt** | Custom instructions for every conversation |
+| **Benchmark** | 1,024-token prefill / 256-token decode run, comparable to Google's published numbers |
+| **Tools** | Enable or disable on-device tools |
 
 ## Architecture
 
 ```text
-ChatView → AppState (@MainActor) → LiteRTChatEngine (actor) → LiteRTLM Engine
-                                                       ↓
-SwiftData threads/turns ← streaming ChatChunk deltas + GenerationStats
+┌────────────────────────────── SwiftUI ──────────────────────────────┐
+│  ThreadListView ─▶ ChatView        ModelLibraryView     SettingsView │
+└──────────────────────────────────┬──────────────────────────────────┘
+                                   ▼
+                     AppState  (@MainActor, @Observable)
+       engine lifecycle queue · chat ↔ conversation binding · streaming
+                │                                         │
+                ▼                                         ▼
+   LiteRTChatEngine  (actor)                   SwiftData  (ChatThread, ChatTurn)
+   load ladder · validation · context budget
+                │
+                ▼
+     LiteRT-LM  Engine + Conversation  ──▶  Metal GPU / CPU
 ```
 
-- `LiteRTChatEngine` (`ChatEngine.swift`) is the one actor that owns an `Engine` + `Conversation`. `LiteRTLM` is also imported by `Tools.swift` (tool protocol) and `AppState` (benchmark API).
-- `AppState` serializes engine lifecycle work (load, model switch, option changes, benchmark, delete) and binds the native conversation to the open chat, replaying its text history when you switch chats.
-- `InferencePlanner` (pure, tested) resolves user options + device memory into backend, KV-cache size, sampler, thinking budget, visual-token budget, and MTP; `ContextBudget` (pure, tested) does the KV-cache arithmetic.
-- Per-reply stats come from the runtime benchmark API with client-side timing as fallback
+| Component | Responsibility |
+| --- | --- |
+| `AppState` | Runs every engine operation — load, model switch, settings change, benchmark, delete — one at a time; binds the native conversation to the open chat; publishes streamed text at ~10 Hz. |
+| `LiteRTChatEngine` | The single owner of a LiteRT-LM `Engine` and `Conversation`. Loads through a GPU → CPU, multimodal → text-only ladder, validates each engine, and keeps every request inside the KV cache. |
+| `InferencePlanner` | Pure, tested resolution of user options and device memory into backend, KV-cache size, sampler, thinking budget, visual-token budget, and MTP. Decides when a settings change needs an engine rebuild. |
+| `ContextBudget` | Pure, tested KV-cache arithmetic: token estimates, history trimming, and reply caps. |
+| `ModelStore` | Model downloads, verification, and storage. |
+| `DeviceProfile` | Device memory policy, based on the app's real memory limit. |
+
+## Reliability
+
+These safeguards come from failures reproduced on device by the test harness.
+
+- **Context window** — Overflowing the KV cache corrupts LiteRT-LM's native heap and crashes the app. Every send measures the tokens already cached, estimates the new message (calibrated against exact runtime counts), trims older turns when needed — truncating the latest reply rather than dropping it — and caps the reply to the remaining room. Messages that can never fit are rejected with a clear explanation.
+- **Engine validation** — LiteRT-LM can report a successful load after failing to map parts of the model file. Each new engine must complete a one-token generation before the app uses it.
+- **Stop and resume** — A cancelled LiteRT-LM conversation rejects the next message. Stopped replies keep their partial text, and the chat's conversation is rebuilt from history before the next send.
+- **Background** — iOS doesn't allow GPU work in the background. A reply in progress stops cleanly when the app leaves the foreground.
+- **Memory** — The memory entitlements raise the app's limit from about 3.5 GB to about 6.4 GB on a 12 GB iPhone and prevent address-space exhaustion when engines are rebuilt.
+- **Capability flags** — The model file's *thinking* and *function-calling* flags are not trusted; Gemma 4 E2B reports both as unsupported, yet reasons and calls tools on device.
+
+## Performance
+
+Measured on iPhone 17 Pro (12 GB, iOS 27) with Gemma 4 on the GPU and MTP enabled.
+
+| Metric | Gemma 4 E2B | Gemma 4 E4B |
+| --- | --- | --- |
+| Load (warm, kernels cached) | 0.6 – 2 s | — |
+| Load (first, after download) | ~7 s | ~9 s |
+| Time to first token | 0.1 – 0.3 s | ~0.4 s |
+| Decode, in chat | 40 – 80 tok/s | ~50 tok/s |
+| Benchmark prefill (1,024 tokens) | 3,900 – 5,000 tok/s | — |
+| Benchmark decode (256 tokens) | 25 – 62 tok/s, depending on device temperature | — |
+| App memory footprint | 0.6 – 2.3 GB | ~1.1 GB after load |
+
+For reference, Google reports 2,878 prefill and 56 decode tokens per second for E2B on the iPhone 17 Pro GPU.
+
+## Testing
+
+| Target | Runs on | Covers |
+| --- | --- | --- |
+| `iRTChatTests` | Simulator | Planner, context budgeting, device policy, calculator, catalog, downloads, and the app pipeline through the mock engine |
+| `iRTChatDeviceTests` | iPhone | The real engine in-process: download, load, text, chat isolation, stop and continue, tools, thinking, image, audio, settings rebuilds, context limits, benchmark. E4B scenarios are opt-in. |
+| `iRTChatUITests` | iPhone or simulator | Real taps: new chat, send, Stop, Home button mid-reply, leaving and returning mid-reply, rapid settings changes, Models tab |
+
+**Unit tests (simulator)**
+
+```sh
+xcodebuild test -project iRTChat.xcodeproj -scheme iRTChat \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -only-testing:iRTChatTests
+```
+
+**On-device harness** (connected, unlocked iPhone; downloads E2B if missing)
+
+```sh
+scripts/device-harness.sh inference   # engine scenarios
+scripts/device-harness.sh ui          # real-tap UI flows
+scripts/device-harness.sh e4b         # opt-in E4B scenarios (3.7 GB download)
+scripts/device-harness.sh all         # inference, then UI
+
+DEVICE_ID=<udid> scripts/device-harness.sh all   # another iPhone
+```
+
+Results are written to `build/device-harness/`: result bundles, per-scenario JSON metrics and screenshots, and `harness-report.json` pulled from the device. The app logs under the subsystem `com.patricedery.irtchat` with categories `engine`, `generation`, and `lifecycle`.
+
+[MobileBuildMCP](https://github.com/getsentry/xcodebuildmcp.com) users get project defaults from `.mobilebuildmcp/config.yaml`, including a `device-tests` profile for `test_device`.
 
 ## Project structure
 
-| Path | Contents |
+```text
+iRTChat/
+├── iRTChatApp.swift          App entry, SwiftData container, scene lifecycle
+├── AppState.swift            Engine lifecycle, chat binding, generation pipeline
+├── iRTChat.entitlements      Extended virtual addressing, increased memory limit
+├── Inference/                Engine actor, planner, context budget, device policy, tools
+├── Models/                   Model catalog and download store
+├── Persistence/              SwiftData models
+├── Views/                    Chat, chat list, models, settings, audio recorder
+└── Support/                  Design tokens, haptics, image preparation, diagnostics
+iRTChatTests/                 Unit tests
+iRTChatDeviceTests/           On-device engine scenarios
+iRTChatUITests/               UI flows
+scripts/device-harness.sh     On-device test runner
+Vendor/LiteRT-LM/             LiteRT-LM v0.18.0 Swift package
+```
+
+## Troubleshooting
+
+| Symptom | Fix |
 | --- | --- |
-| `iRTChat/` | App sources — views, engine, model store, SwiftData |
-| `iRTChat/Views/` | SwiftUI screens (`ChatView`, `ThreadListView`, `ModelLibraryView`, `SettingsView`) |
-| `iRTChat/Inference/` | Engine actor, planner, device profile, tools |
-| `iRTChat/Support/` | Design tokens, haptics, image preparation, logging + memory probes |
-| `iRTChatTests/` | Unit tests (simulator) |
-| `iRTChatDeviceTests/` | On-device engine scenarios (physical iPhone) |
-| `iRTChatUITests/` | Real-tap UI flows |
-| `scripts/device-harness.sh` | Runs the on-device suites and collects reports |
-| `Vendor/LiteRT-LM/` | Pruned LiteRT-LM v0.18.0 Swift package (see below) |
+| Signing error *"PLA Update available"* | Accept the latest Program License Agreement at [developer.apple.com/account](https://developer.apple.com/account). |
+| *"Failed to create a bundle instance … iRTChatDeviceTests.xctest"* | The iPhone has an install from before that target existed. Run `xcrun devicectl device uninstall app --device <udid> com.patricedery.irtchat` and retry. This also removes downloaded models. |
+| Download stopped | Downloads run in the foreground only. Tap **Resume** in the **Models** tab; if the app was closed, the download starts over. |
+| *"Older messages were dropped from the model's memory"* | Expected in long chats. Raise the KV-cache size under **Settings → Reasoning & Memory**, or start a new chat. |
 
 ## Known limitations
 
-- Downloads are foreground-only with resume — keep the app open while downloading
-- Photo attach is library-only (no in-app camera capture yet)
-- E4B is gated on the app's memory limit (≥ 4.5 GB), not total RAM
-- Long chats keep only as much recent history as fits the KV cache (a notice says when older messages were dropped); images and audio are not replayed after switching chats
-- Voice messages are not stored, only marked in the chat
-- The simulator runs the UI + mock engine only; real inference needs a physical iPhone
-- KV session save/restore across chats is not yet in LiteRT-LM's Swift API
+- Downloads run in the foreground only; keep the app open until they finish.
+- Photos come from the library only; there is no in-app camera capture yet.
+- When you switch chats, only text history is replayed to the model, not images or audio.
+- Voice messages are not stored; they are marked in the chat.
+- The simulator runs the UI with the mock engine only.
+- LiteRT-LM's Swift API does not yet support saving and restoring KV sessions.
 
-## Why is LiteRT-LM vendored?
+## Vendored LiteRT-LM
 
-`Vendor/LiteRT-LM` is the upstream Swift package surface (336 KB) at v0.18.0. The upstream repo keeps prebuilt binaries in Git LFS, whose GitHub batch endpoint intermittently fails, breaking remote SPM resolution. The iOS build never touches those LFS files (it uses the checksummed release xcframework), so vendoring is behavior-neutral. Refresh with `TAG=vX.Y.Z ./Vendor/refresh-litert-lm.sh` — see `Vendor/README.md`.
+`Vendor/LiteRT-LM` contains the Swift package surface of [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) at v0.18.0. The upstream repository stores prebuilt binaries in Git LFS, whose endpoint intermittently fails during Swift Package Manager resolution. The iOS build uses only the checksummed release XCFramework, so vendoring the Swift sources changes no behavior.
+
+To update to a newer release:
+
+```sh
+TAG=v0.19.0 ./Vendor/refresh-litert-lm.sh
+```
+
+Then update the tag in `Vendor/README.md` and run the test suites.
 
 ## Contributing
 
-We work directly on `main`. Keep the test suite green and the UI native.
+Work happens directly on `main`. Keep the unit tests and the on-device harness green, and keep the UI native.
 
-## Sources
+## Acknowledgements
 
-- <https://github.com/google-ai-edge/litert>
-- <https://github.com/google-ai-edge/LiteRT-LM>
-- <https://developers.google.com/edge/litert-lm/swift>
-- <https://developers.google.com/edge/litert-lm/models/gemma-4>
-- <https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm>
+- [LiteRT](https://github.com/google-ai-edge/litert) and [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) by Google (Apache 2.0)
+- [LiteRT-LM Swift guide](https://developers.google.com/edge/litert-lm/swift)
+- [Gemma 4 on LiteRT-LM](https://developers.google.com/edge/litert-lm/models/gemma-4)
+- [Gemma 4 E2B](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) and [E4B](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) model builds by `litert-community`
