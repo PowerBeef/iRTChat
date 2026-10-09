@@ -11,6 +11,7 @@ No accounts. No API keys. No cloud. After a one-time model download, every conve
 ![SwiftUI](https://img.shields.io/badge/UI-SwiftUI-0A84FF)
 ![LiteRT-LM 0.18.0](https://img.shields.io/badge/LiteRT--LM-0.18.0-4285F4)
 ![Gemma 4](https://img.shields.io/badge/Model-Gemma%204-8E75FF)
+![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue)
 
 </div>
 
@@ -30,6 +31,7 @@ No accounts. No API keys. No cloud. After a one-time model download, every conve
 - [Troubleshooting](#troubleshooting)
 - [Known limitations](#known-limitations)
 - [Vendored LiteRT-LM](#vendored-litert-lm)
+- [License](#license)
 - [Acknowledgements](#acknowledgements)
 
 ## Highlights
@@ -74,12 +76,12 @@ Run the `iRTChat` scheme on any iPhone simulator with the `--mock-engine` launch
 
 ## Models
 
-| Model | Size | Use | Gating |
-| --- | --- | --- | --- |
-| **Gemma 4 E2B** | 2.6 GB | Default. Text, vision, audio, reasoning. | Any supported iPhone |
-| **Gemma 4 E4B** | 3.7 GB | Higher quality. | App memory limit of at least 4.5 GB |
+| Model | Size | Use | Requires | License |
+| --- | --- | --- | --- | --- |
+| **Gemma 4 E2B** | 2.6 GB | Default. Text, vision, audio, reasoning. | Any supported iPhone | Apache 2.0 |
+| **Gemma 4 E4B** | 3.7 GB | Higher quality. | App memory limit of at least 4.5 GB | Apache 2.0 |
 
-Models are the multimodal `.litertlm` builds from Hugging Face ([`litert-community`](https://huggingface.co/litert-community)). Downloads support pause and resume, are size- and HTTP-status-verified, check free space first, and are stored in Application Support, excluded from iCloud backup.
+Models are the multimodal `.litertlm` builds from Hugging Face ([`litert-community`](https://huggingface.co/litert-community)), downloaded at runtime without an account; they are not included in this repository. Downloads support pause and resume, are size- and HTTP-status-verified, check free space first, and are stored in Application Support, excluded from iCloud backup.
 
 ### Settings
 
@@ -231,9 +233,19 @@ Then update the tag in `Vendor/README.md` and run the test suites.
 
 Work happens directly on `main`. Keep the unit tests and the on-device harness green, and keep the UI native.
 
+## License
+
+iRTChat is licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution of the third-party components it uses and downloads:
+
+| Component | Distribution | License |
+| --- | --- | --- |
+| iRTChat source code | This repository | Apache 2.0 |
+| LiteRT-LM | Vendored in `Vendor/LiteRT-LM` | Apache 2.0 |
+| Gemma 4 E2B / E4B | Downloaded at runtime | Apache 2.0 |
+
 ## Acknowledgements
 
 - [LiteRT](https://github.com/google-ai-edge/litert) and [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) by Google (Apache 2.0)
 - [LiteRT-LM Swift guide](https://developers.google.com/edge/litert-lm/swift)
 - [Gemma 4 on LiteRT-LM](https://developers.google.com/edge/litert-lm/models/gemma-4)
-- [Gemma 4 E2B](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) and [E4B](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) model builds by `litert-community`
+- [Gemma 4](https://huggingface.co/google/gemma-4-E2B-it) by Google, with [E2B](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) and [E4B](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) LiteRT-LM builds by `litert-community` (Apache 2.0)
