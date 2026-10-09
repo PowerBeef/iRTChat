@@ -149,7 +149,9 @@ struct SettingsView: View {
       if appState.options.maxNumTokensOverride != nil {
         Stepper(
           "KV cache: \(appState.options.maxNumTokensOverride ?? 2048) tokens",
-          value: contextBinding, in: 256...8192, step: 256)
+          value: contextBinding,
+          in: 256...DeviceProfile.current.maxContextTokens(model: appState.store.activeModelID),
+          step: 1024)
       }
     } header: {
       Label("Reasoning & Memory", systemImage: "brain")

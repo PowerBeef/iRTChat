@@ -27,10 +27,18 @@ final class DeviceProfileTests: XCTestCase {
   }
 
   func testDefaultMaxTokens() {
-    XCTAssertEqual(DeviceProfile.defaultMaxTokens(model: .e2b, memoryBytes: 8_000_000_000), 4096)
-    XCTAssertEqual(DeviceProfile.defaultMaxTokens(model: .e2b, memoryBytes: 6_000_000_000), 2048)
-    XCTAssertEqual(DeviceProfile.defaultMaxTokens(model: .e4b, memoryBytes: 8_000_000_000), 2048)
-    XCTAssertEqual(DeviceProfile.defaultMaxTokens(model: .e4b, memoryBytes: 6_000_000_000), 1024)
+    // Calibrated: 8K for everyday chat on all supported (8 GB+) devices.
+    XCTAssertEqual(DeviceProfile.defaultMaxTokens(model: .e2b, memoryBytes: 8_000_000_000), 8192)
+    XCTAssertEqual(DeviceProfile.defaultMaxTokens(model: .e4b, memoryBytes: 8_000_000_000), 8192)
+    XCTAssertEqual(DeviceProfile.defaultMaxTokens(model: .e2b, memoryBytes: 6_000_000_000), 4096)
+  }
+
+  func testLongContextCeilingFollowsAppMemoryLimit() {
+    XCTAssertEqual(DeviceProfile.maxContextTokens(model: .e2b, appMemoryLimitBytes: 8_600_000_000), 32_768)
+    XCTAssertEqual(DeviceProfile.maxContextTokens(model: .e4b, appMemoryLimitBytes: 8_600_000_000), 32_768)
+    XCTAssertEqual(DeviceProfile.maxContextTokens(model: .e4b, appMemoryLimitBytes: 5_000_000_000), 16_384)
+    XCTAssertEqual(DeviceProfile.maxContextTokens(model: .e2b, appMemoryLimitBytes: 4_000_000_000), 16_384)
+    XCTAssertEqual(DeviceProfile.maxContextTokens(model: .e2b, appMemoryLimitBytes: nil), 16_384)
   }
 
   func testCurrentDeviceReadsMemory() {

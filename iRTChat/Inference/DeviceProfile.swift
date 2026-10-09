@@ -45,16 +45,30 @@ struct DeviceProfile: Sendable, Equatable {
       physicalMemoryBytes: physicalMemoryBytes, appMemoryLimitBytes: appMemoryLimitBytes)
   }
 
-  /// Default KV-cache size (`maxNumTokens`) per model and memory class.
+  /// Everyday chat context. Calibrated on iPhone 17 Pro: a larger KV cache
+  /// slows *every* reply (E2B decode 83 → 69 → 54 → 40 tok/s at 4K → 8K →
+  /// 16K → 32K), so chat stays at 8K and long inputs use ``maxContextTokens``.
+  static let standardContextTokens = 8_192
+
+  /// Default KV-cache size (`maxNumTokens`). Supported devices (iPhone 15 Pro
+  /// and later) all have 8 GB+; smaller values only apply to the simulator.
   static func defaultMaxTokens(model: ModelID, memoryBytes: UInt64) -> Int {
-    let roomy = memoryBytes >= 7_000_000_000
+    memoryBytes >= 7_000_000_000 ? standardContextTokens : 4_096
+  }
+
+  /// Largest context worth loading for long inputs (files, web passages).
+  /// Measured peaks at 32K with a third of it filled: E2B 2.8 GB, E4B 3.6 GB.
+  /// The model file may cap it further (E2B: 32,003).
+  static func maxContextTokens(model: ModelID, appMemoryLimitBytes: UInt64?) -> Int {
+    guard let limit = appMemoryLimitBytes else { return 16_384 }
     switch model {
-    case .e2b:
-      return roomy ? 4096 : 2048
-    case .e4b:
-      // E4B has a larger per-token footprint; stay conservative even on Pro.
-      return roomy ? 2048 : 1024
+    case .e2b: return limit >= 4_500_000_000 ? 32_768 : 16_384
+    case .e4b: return limit >= 6_500_000_000 ? 32_768 : 16_384
     }
+  }
+
+  func maxContextTokens(model: ModelID) -> Int {
+    Self.maxContextTokens(model: model, appMemoryLimitBytes: appMemoryLimitBytes)
   }
 
   func defaultMaxTokens(model: ModelID) -> Int {

@@ -10,6 +10,7 @@
 #   ui         Real-tap flows (send, Stop, Home button mid-reply, leave/return
 #              mid-reply, rapid Settings changes, Models tab). Needs E2B downloaded.
 #   e4b        Opt-in E4B scenarios (3.7 GB download).
+#   calibrate  Context-size calibration: memory and speed at 4K-32K KV caches.
 #   all        inference, then ui.
 #
 # Env: DEVICE_ID (default: deviceId from the git-ignored .mobilebuildmcp/config.yaml),
@@ -69,6 +70,10 @@ case "$SUITE" in
   inference) run_suite inference -only-testing:iRTChatDeviceTests/InferenceScenarioTests "$@" || status=$? ;;
   ui) run_suite ui -only-testing:iRTChatUITests "$@" || status=$? ;;
   e4b) export TEST_RUNNER_HARNESS_E4B=1; run_suite e4b -only-testing:iRTChatDeviceTests/E4BScenarioTests "$@" || status=$? ;;
+  calibrate)
+    export TEST_RUNNER_HARNESS_CALIBRATE=1
+    run_suite calibrate -only-testing:iRTChatDeviceTests/CalibrationScenarioTests "$@" || status=$?
+    ;;
   all)
     run_suite inference -only-testing:iRTChatDeviceTests/InferenceScenarioTests "$@" || status=$?
     ui_status=0

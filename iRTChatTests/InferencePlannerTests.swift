@@ -10,7 +10,7 @@ final class InferencePlannerTests: XCTestCase {
     let resolved = InferencePlanner.resolve(
       options: InferenceOptions(), model: .e2b, memoryBytes: roomy)
     XCTAssertTrue(resolved.useGPU)
-    XCTAssertEqual(resolved.maxNumTokens, 4096)
+    XCTAssertEqual(resolved.maxNumTokens, 8192)
     XCTAssertNil(resolved.thinkingBudget)
     XCTAssertEqual(resolved.visualTokenBudget, 280)
     XCTAssertTrue(resolved.enableSpeculativeDecoding)
@@ -22,11 +22,11 @@ final class InferencePlannerTests: XCTestCase {
   func testTightDeviceGetsSmallerCache() {
     let e2b = InferencePlanner.resolve(
       options: InferenceOptions(), model: .e2b, memoryBytes: tight)
-    XCTAssertEqual(e2b.maxNumTokens, 2048)
+    XCTAssertEqual(e2b.maxNumTokens, 4096)
 
     let e4b = InferencePlanner.resolve(
       options: InferenceOptions(), model: .e4b, memoryBytes: roomy)
-    XCTAssertEqual(e4b.maxNumTokens, 2048)
+    XCTAssertEqual(e4b.maxNumTokens, 8192)
   }
 
   func testOverrideIsClamped() {
@@ -35,10 +35,10 @@ final class InferencePlannerTests: XCTestCase {
     XCTAssertEqual(
       InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).maxNumTokens,
       256)
-    options.maxNumTokensOverride = 100_000
+    options.maxNumTokensOverride = 200_000
     XCTAssertEqual(
       InferencePlanner.resolve(options: options, model: .e2b, memoryBytes: roomy).maxNumTokens,
-      8192)
+      InferencePlanner.maxTokens)
   }
 
   func testThinkingBudget() {

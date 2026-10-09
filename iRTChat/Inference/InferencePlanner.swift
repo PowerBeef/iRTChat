@@ -176,7 +176,9 @@ enum ContextBudget {
 
 enum InferencePlanner {
   static let minTokens = 256
-  static let maxTokens = 8192
+  /// Gemma 4 E2B/E4B support 128K; the practical ceiling is device memory
+  /// (see DeviceProfile and the calibration scenario).
+  static let maxTokens = 32_768
 
   /// Resolve user options + model + device into concrete engine settings.
   static func resolve(
