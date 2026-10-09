@@ -10,16 +10,21 @@ struct ChatView: View {
   @State private var photoItem: PhotosPickerItem?
   @State private var recorder = AudioRecorder()
   @State private var showLibrary = false
+  @State private var reader = SpeechReader()
+  /// The user message being edited in the composer, if any.
+  @State private var editingTurn: ChatTurn?
   @FocusState private var inputFocused: Bool
   @Namespace private var inputNamespace
 
   var body: some View {
-    // Sorted once per render (not per use: this re-renders while streaming).
+    // Computed once per render (not per use: this re-renders while streaming).
     let turns = thread.orderedTurns
+    let versions = versionGroups()
     VStack(spacing: 0) {
       engineBanner
       noticeBanner
-      messagesList(turns)
+      messagesList(turns, versions: versions)
+      editingBar
       pendingBar
       inputBar
     }
@@ -41,6 +46,7 @@ struct ChatView: View {
     .task(id: thread.id) {
       await appState.activate(thread)
     }
+    .onDisappear { reader.stop() }
   }
 
   private var ambientBackground: some View {
@@ -121,7 +127,7 @@ struct ChatView: View {
 
   // MARK: - Messages
 
-  private func messagesList(_ turns: [ChatTurn]) -> some View {
+  private func messagesList(_ turns: [ChatTurn], versions: [VersionKey: [ChatTurn]]) -> some View {
     Group {
       if turns.isEmpty {
         emptyState
@@ -132,7 +138,9 @@ struct ChatView: View {
               ForEach(turns) { turn in
                 MessageBubbleView(
                   turn: turn, isStreaming: isLiveBubble(turn, in: turns),
-                  toolStatus: appState.toolStatus)
+                  toolStatus: appState.toolStatus,
+                  versions: versions[VersionKey(turn)] ?? [],
+                  actions: actions(for: turn))
                   .id(turn.id)
               }
               Color.clear.frame(height: 1).id("bottom")
@@ -200,6 +208,77 @@ struct ChatView: View {
   private func sendSuggestion(_ text: String) {
     draft = text
     send()
+  }
+
+  // MARK: - Message actions
+
+  struct VersionKey: Hashable {
+    var parentID: UUID?
+    var role: String
+    init(_ turn: ChatTurn) {
+      parentID = turn.parentID
+      role = turn.roleRaw
+    }
+  }
+
+  /// Turns that are versions of each other (same parent and role), only
+  /// where there is more than one.
+  private func versionGroups() -> [VersionKey: [ChatTurn]] {
+    // Unlinked (legacy, never migrated) threads have no parents to group by.
+    guard thread.activeLeafID != nil else { return [:] }
+    return Dictionary(grouping: thread.turns, by: VersionKey.init)
+      .filter { $0.value.count > 1 }
+      .mapValues { $0.sorted { $0.createdAt < $1.createdAt } }
+  }
+
+  private func actions(for turn: ChatTurn) -> MessageActions {
+    MessageActions(
+      isBusy: appState.isGenerating,
+      isSpeaking: reader.speakingID == turn.id,
+      canRegenerate: !turn.isUser && appState.canRegenerate(turn, in: thread),
+      regenerate: {
+        reader.stop()
+        Haptics.send()
+        Task { await appState.regenerate(turn, in: thread) }
+      },
+      edit: { startEditing(turn) },
+      speak: { reader.toggle(turn.text, id: turn.id) },
+      selectVersion: { version in
+        withAnimation(.snappy) { appState.selectVersion(version, in: thread) }
+      })
+  }
+
+  private func startEditing(_ turn: ChatTurn) {
+    editingTurn = turn
+    draft = turn.text
+    pendingImage = nil
+    recorder.discard()
+    inputFocused = true
+  }
+
+  private func cancelEditing() {
+    editingTurn = nil
+    draft = ""
+  }
+
+  @ViewBuilder
+  private var editingBar: some View {
+    if editingTurn != nil {
+      HStack(spacing: 8) {
+        Image(systemName: "pencil")
+        Text("Editing message")
+          .font(.caption)
+          .accessibilityIdentifier("chat.editing")
+        Spacer()
+        Button("Cancel", action: cancelEditing)
+          .font(.caption)
+          .buttonStyle(.glass)
+          .controlSize(.small)
+          .accessibilityIdentifier("chat.editing.cancel")
+      }
+      .padding(.horizontal)
+      .padding(.vertical, 4)
+    }
   }
 
   private func scrollSignature(_ turns: [ChatTurn]) -> String {
@@ -289,7 +368,7 @@ struct ChatView: View {
           .frame(width: DS.controlTarget, height: DS.controlTarget)
           .glassEffect(.regular.interactive(), in: .circle)
       }
-      .disabled(appState.isGenerating)
+      .disabled(appState.isGenerating || editingTurn != nil)
       .onChange(of: photoItem) { _, item in
         Task {
           if let item, let data = try? await item.loadTransferable(type: Data.self) {
@@ -306,7 +385,7 @@ struct ChatView: View {
             recorder.isRecording ? .regular.tint(.red).interactive() : .regular.interactive(),
             in: .circle)
       }
-      .disabled(appState.isGenerating)
+      .disabled(appState.isGenerating || editingTurn != nil)
     }
   }
 
@@ -342,6 +421,22 @@ struct ChatView: View {
   }
 
   private func send() {
+    reader.stop()
+    if let editingTurn {
+      let text = draft
+      draft = ""
+      self.editingTurn = nil
+      inputFocused = false
+      Haptics.send()
+      Task {
+        let accepted = await appState.edit(editingTurn, text: text, in: thread)
+        if !accepted, draft.isEmpty {
+          draft = text
+          self.editingTurn = editingTurn
+        }
+      }
+      return
+    }
     let text = draft
     let image = pendingImage
     let audioURL = recorder.finishedURL

@@ -43,6 +43,31 @@ struct MarkdownDocument: Equatable, Sendable {
     self.blocks = blocks
   }
 
+  /// Readable text without markdown syntax (for reading aloud). Code
+  /// blocks are skipped: spoken source code isn't useful.
+  var plainText: String {
+    Self.plain(blocks).joined(separator: "\n")
+  }
+
+  private static func plain(_ blocks: [Block]) -> [String] {
+    blocks.flatMap { block -> [String] in
+      switch block {
+      case .heading(_, let text), .paragraph(let text):
+        return [String(text.characters)]
+      case .list(_, _, let items):
+        return items.flatMap { plain($0.blocks) }
+      case .quote(let inner):
+        return plain(inner)
+      case .table(let header, let rows, _):
+        return ([header] + rows).map { $0.map { String($0.characters) }.joined(separator: ", ") }
+      case .math(let latex):
+        return [LaTeXText.unicode(latex)]
+      case .code, .rule:
+        return []
+      }
+    }
+  }
+
   // MARK: Blocks
 
   private static func block(_ markup: Markup) -> Block? {

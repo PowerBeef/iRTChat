@@ -134,3 +134,11 @@ extension MarkdownTests {
     XCTAssertEqual(rendered, code)
   }
 }
+
+extension MarkdownTests {
+  func testPlainTextForReadingAloud() {
+    let document = MarkdownDocument(
+      parsing: "## Plan\n\n- **Buy** milk\n- Call [Sam](https://x.y)\n\n```swift\nlet x = 1\n```\n\n| A | B |\n|---|---|\n| 1 | 2 |")
+    XCTAssertEqual(document.plainText, "Plan\nBuy milk\nCall Sam\nA, B\n1, 2")
+  }
+}

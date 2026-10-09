@@ -694,6 +694,7 @@ actor MockChatEngine: ChatEngineProtocol {
           text.localizedCaseInsensitiveContains("markdown")
           ? MockChatEngine.markdownSample : await self.script
         let stats = await self.stats
+        await self.recordSend(text)
         await self.setGenerating(true)
         for chunk in script {
           try? await Task.sleep(for: .milliseconds(60))
@@ -714,6 +715,9 @@ actor MockChatEngine: ChatEngineProtocol {
 
   private var generating = false
   private(set) var cancelRequested = false
+  /// Test instrumentation: every prompt sent.
+  private(set) var sendLog: [String] = []
+  private func recordSend(_ text: String) { sendLog.append(text) }
 
   private func setGenerating(_ value: Bool) {
     generating = value
@@ -767,6 +771,7 @@ actor MockChatEngine: ChatEngineProtocol {
   private(set) var helperResponse = Data(#"{"title":"Mock chat"}"#.utf8)
   private(set) var helperPrompts: [String] = []
   func setHelperResponse(_ json: String) { helperResponse = Data(json.utf8) }
+  func setScript(_ text: String) { script = [ChatChunk(textDelta: text, thoughtDelta: nil)] }
 
   func helperJSON(prompt: String, schemaJSON: String, maxOutputTokens: Int) async throws -> Data {
     helperPrompts.append(prompt)

@@ -155,6 +155,38 @@ final class ChatFlowUITests: XCTestCase {
     copy.tap()
   }
 
+  /// Regenerate adds a second version; the switcher moves between them.
+  /// Editing a message (long press → Edit) branches the conversation.
+  func testRegenerateEditAndVersions() throws {
+    try openNewChat()
+    send("Name one primary color. One word.")
+    try waitForReplyToFinish(timeout: 120)
+
+    element("message.regenerate").tap()
+    try waitForReplyToFinish(timeout: 120)
+    let version = element("message.version")
+    XCTAssertTrue(version.waitForExistence(timeout: 5), "No version switcher after regenerate")
+    XCTAssertEqual(version.label, "Version 2 of 2")
+    element("message.version.previous").tap()
+    XCTAssertEqual(element("message.version").label, "Version 1 of 2")
+
+    element("message.user").press(forDuration: 1.0)
+    app.buttons["Edit"].tap()
+    XCTAssertTrue(element("chat.editing").waitForExistence(timeout: 5))
+    let input = element("chat.input")
+    input.tap()
+    input.typeText(" Answer in French.")
+    element("chat.send").tap()
+    try waitForReplyToFinish(timeout: 120)
+    attachScreenshot("after-edit")
+    XCTAssertTrue(element("message.user").label.hasSuffix("Answer in French."))
+    // The edited message is version 2 of 2; the reply under it is new.
+    let userVersion = app.descendants(matching: .any).matching(identifier: "message.version")
+      .allElementsBoundByIndex.first
+    XCTAssertEqual(userVersion?.label, "Version 2 of 2")
+    XCTAssertFalse(element("chat.editing").exists)
+  }
+
   /// E4B is the only model: its card shows Ready (device) or Download.
   func testModelsTabShowsTheModel() throws {
     app.tabBars.buttons["Models"].tap()

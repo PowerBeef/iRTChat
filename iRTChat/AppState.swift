@@ -317,14 +317,91 @@ final class AppState {
   func send(text: String, imageData: Data?, audioFileURL: URL?, in thread: ChatThread) async
     -> Bool
   {
+    let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !prompt.isEmpty || imageData != nil || audioFileURL != nil else { return false }
+    return await generate(
+      prompt: prompt, imageData: imageData, audioFileURL: audioFileURL, in: thread,
+      history: nil
+    ) {
+      thread.append(
+        ChatTurn(role: .user, text: prompt, imageData: imageData, hasAudio: audioFileURL != nil))
+      if thread.title == "New chat" {
+        thread.title = Self.title(prompt: prompt, hasImage: imageData != nil)
+      }
+    }
+  }
+
+  /// Whether `reply`'s prompt can be answered again. Voice recordings aren't
+  /// kept, so replies to voice-only messages can't be regenerated.
+  func canRegenerate(_ reply: ChatTurn, in thread: ChatThread) -> Bool {
+    guard !reply.isUser, let prompt = promptTurn(of: reply, in: thread) else { return false }
+    return !prompt.hasAudio || !prompt.text.isEmpty
+  }
+
+  /// Answer `reply`'s prompt again as a new version of the reply (the old
+  /// one stays reachable through the version switcher).
+  @discardableResult
+  func regenerate(_ reply: ChatTurn, in thread: ChatThread) async -> Bool {
+    guard canRegenerate(reply, in: thread), let prompt = promptTurn(of: reply, in: thread) else {
+      return false
+    }
+    return await generate(
+      prompt: prompt.text, imageData: prompt.imageData, audioFileURL: nil, in: thread,
+      history: thread.textHistory(before: prompt), replacing: reply
+    ) {}
+  }
+
+  /// Replace `userTurn` with `text` as a new version and answer it. The
+  /// original message and its replies stay reachable as the older version.
+  @discardableResult
+  func edit(_ userTurn: ChatTurn, text: String, in thread: ChatThread) async -> Bool {
+    let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard userTurn.isUser, !prompt.isEmpty || userTurn.imageData != nil else { return false }
+    return await generate(
+      prompt: prompt, imageData: userTurn.imageData, audioFileURL: nil, in: thread,
+      history: thread.textHistory(before: userTurn)
+    ) {
+      thread.addVersion(ChatTurn(role: .user, text: prompt, imageData: userTurn.imageData), of: userTurn)
+    }
+  }
+
+  /// Show `turn`'s version (and the conversation after it).
+  func selectVersion(_ turn: ChatTurn, in thread: ChatThread) {
+    guard !isGenerating || generatingThreadID != thread.id else { return }
+    thread.selectBranch(through: turn)
+    try? modelContext?.save()
+    // The engine holds the previous branch: rebuild it on the next message.
+    if conversationThreadID == thread.id { conversationThreadID = nil }
+  }
+
+  private func promptTurn(of reply: ChatTurn, in thread: ChatThread) -> ChatTurn? {
+    guard let parentID = reply.parentID else { return nil }
+    return thread.turns.first { $0.id == parentID && $0.isUser }
+  }
+
+  /// Shared generation path. `history` is the text before the new prompt
+  /// when the engine must be rebuilt from an earlier point (regenerate,
+  /// edit); nil continues the visible branch. Once the message is accepted,
+  /// `persist` attaches the user turn (if any), then the reply is added —
+  /// as a new version of `replacing` when given.
+  private func generate(
+    prompt: String, imageData: Data?, audioFileURL: URL?, in thread: ChatThread,
+    history rewound: [(role: ChatRole, text: String)]?, replacing: ChatTurn? = nil,
+    persist: () -> Void
+  ) async -> Bool {
     guard !isGenerating, !isBenchmarking else { return false }
     guard let context = modelContext else { return false }
     generationError = nil
 
-    let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !prompt.isEmpty || imageData != nil || audioFileURL != nil else { return false }
-
-    guard await activate(thread) else { return false }
+    let threadID = thread.id
+    selectedThreadID = threadID
+    let history = rewound ?? thread.textHistory
+    let ready = await serialized {
+      // Rewinding: the engine holds later turns that must not stay in context.
+      if rewound != nil, self.conversationThreadID == threadID { self.conversationThreadID = nil }
+      return await self.prepareConversation(threadID: threadID, history: history)
+    }
+    guard ready else { return false }
 
     // The engine may have degraded to text-only (model without executors).
     if imageData != nil, resolved?.enableVision != true {
@@ -338,8 +415,6 @@ final class AppState {
 
     // Keep the KV cache from overflowing (native heap corruption → crash):
     // trim the replayed history if this message + a reply wouldn't fit.
-    let history = thread.textHistory
-    let threadID = thread.id
     let fit: Result<Bool, ChatError> = await serialized {
       do {
         return .success(
@@ -362,20 +437,18 @@ final class AppState {
       return false
     }
 
-    // Persist the user turn.
-    let userTurn = ChatTurn(
-      role: .user, text: prompt, imageData: imageData, hasAudio: audioFileURL != nil)
-    thread.append(userTurn)
-    if thread.title == "New chat" {
-      thread.title = Self.title(prompt: prompt, hasImage: imageData != nil)
-    }
     // Placeholder model turn, mutated live as chunks stream in.
+    persist()
     let reply = ChatTurn(role: .model)
-    thread.append(reply)
+    if let replacing {
+      thread.addVersion(reply, of: replacing)
+    } else {
+      thread.append(reply)
+    }
     try? context.save()
 
     isGenerating = true
-    generatingThreadID = thread.id
+    generatingThreadID = threadID
     engineState = .generating
     conversationIsEmpty = false
 

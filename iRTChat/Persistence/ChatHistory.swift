@@ -35,8 +35,17 @@ extension SchemaV2.ChatThread {
 
   /// Text history of the visible branch for re-seeding the model. Skips empty
   /// turns and failed replies (persisted as "Error: …").
-  var textHistory: [(role: ChatRole, text: String)] {
-    orderedTurns.compactMap { turn in
+  var textHistory: [(role: ChatRole, text: String)] { Self.history(orderedTurns) }
+
+  /// Text history of the visible branch up to (not including) `turn`.
+  func textHistory(before turn: ChatTurn) -> [(role: ChatRole, text: String)] {
+    let path = orderedTurns
+    let prefix = path.firstIndex { $0.id == turn.id }.map { Array(path[..<$0]) } ?? path
+    return Self.history(prefix)
+  }
+
+  private static func history(_ turns: [ChatTurn]) -> [(role: ChatRole, text: String)] {
+    turns.compactMap { turn in
       guard !turn.text.isEmpty else { return nil }
       if turn.chatRole == .model, turn.text.hasPrefix(ChatTurn.errorPrefix) { return nil }
       return (turn.chatRole, turn.text)

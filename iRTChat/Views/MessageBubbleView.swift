@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// What a message can do. Closures are supplied by the chat screen.
+struct MessageActions {
+  /// A reply is being generated in this chat: branch-changing actions wait.
+  var isBusy = false
+  var isSpeaking = false
+  var canRegenerate = false
+  var regenerate: () -> Void = {}
+  var edit: () -> Void = {}
+  var speak: () -> Void = {}
+  var selectVersion: (ChatTurn) -> Void = { _ in }
+}
+
 /// One chat message. User turns are tinted glass (tint = authorship);
 /// model turns are calm full-width text with glass accents.
 struct MessageBubbleView: View {
@@ -7,6 +19,10 @@ struct MessageBubbleView: View {
   var isStreaming: Bool = false
   /// What a tool is doing right now (live reply only).
   var toolStatus: String? = nil
+  /// All versions of this turn (edits / regenerations), oldest first.
+  var versions: [ChatTurn] = []
+  var actions = MessageActions()
+  @State private var copied = false
 
   var body: some View {
     if turn.isUser {
@@ -39,11 +55,18 @@ struct MessageBubbleView: View {
         }
         if !turn.text.isEmpty {
           Text(turn.text)
-            .textSelection(.enabled)
             .accessibilityIdentifier("message.user")
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .glassEffect(.regular.tint(.accentColor), in: .rect(cornerRadius: DS.radiusBubble))
+            .contextMenu {
+              Button("Copy", systemImage: "doc.on.doc") { copy(turn.text) }
+              Button("Edit", systemImage: "pencil", action: actions.edit)
+                .disabled(actions.isBusy)
+            }
+        }
+        if versions.count > 1 {
+          versionSwitcher
         }
       }
     }
@@ -69,6 +92,9 @@ struct MessageBubbleView: View {
           .accessibilityElement(children: .combine)
           .accessibilityIdentifier("message.toolStatus")
         }
+        if !turn.thought.isEmpty {
+          thoughtCard
+        }
         if !turn.text.isEmpty {
           VStack(alignment: .leading, spacing: 6) {
             MarkdownView(turn.text)
@@ -92,11 +118,11 @@ struct MessageBubbleView: View {
         } else if isStreaming {
           thinkingDots
         }
-        if !turn.thought.isEmpty {
-          thoughtCard
-        }
         if !turn.toolNames.isEmpty {
           toolChips
+        }
+        if !isStreaming, !turn.text.isEmpty {
+          actionRow
         }
         if let stats = turn.stats {
           Text(stats.footerLine)
@@ -107,6 +133,102 @@ struct MessageBubbleView: View {
         }
       }
       Spacer(minLength: 4)
+    }
+  }
+
+  // MARK: - Actions
+
+  private var isError: Bool { turn.text.hasPrefix(ChatTurn.errorPrefix) }
+
+  private var actionRow: some View {
+    HStack(spacing: 2) {
+      if versions.count > 1 {
+        versionSwitcher
+      }
+      if !isError {
+        actionButton(
+          copied ? "checkmark" : "doc.on.doc", copied ? "Copied" : "Copy", id: "message.copy"
+        ) {
+          copy(turn.text)
+        }
+        actionButton(
+          actions.isSpeaking ? "stop.circle" : "speaker.wave.2",
+          actions.isSpeaking ? "Stop reading" : "Read aloud", id: "message.speak",
+          action: actions.speak)
+      }
+      if actions.canRegenerate {
+        actionButton(
+          "arrow.clockwise", isError ? "Retry" : "Regenerate", id: "message.regenerate",
+          action: actions.regenerate
+        )
+        .disabled(actions.isBusy)
+      }
+      if !isError {
+        ShareLink(item: turn.text) {
+          Image(systemName: "square.and.arrow.up")
+            .frame(width: DS.controlTarget, height: DS.controlTarget)
+        }
+        .accessibilityLabel("Share")
+        .accessibilityIdentifier("message.share")
+      }
+    }
+    .font(.subheadline)
+    .foregroundStyle(.secondary)
+    .buttonStyle(.borderless)
+    .padding(.leading, -12)
+  }
+
+  private func actionButton(
+    _ symbol: String, _ label: String, id: String, action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      Image(systemName: symbol)
+        .contentTransition(.symbolEffect(.replace))
+        .frame(width: DS.controlTarget, height: DS.controlTarget)
+    }
+    .accessibilityLabel(label)
+    .accessibilityIdentifier(id)
+  }
+
+  private var versionSwitcher: some View {
+    let index = versions.firstIndex { $0.id == turn.id } ?? 0
+    return HStack(spacing: 0) {
+      Button {
+        actions.selectVersion(versions[index - 1])
+      } label: {
+        Image(systemName: "chevron.left")
+          .frame(width: 32, height: DS.controlTarget)
+      }
+      .disabled(index == 0 || actions.isBusy)
+      .accessibilityLabel("Previous version")
+      .accessibilityIdentifier("message.version.previous")
+      Text("\(index + 1)/\(versions.count)")
+        .font(.caption)
+        .monospacedDigit()
+        .accessibilityLabel("Version \(index + 1) of \(versions.count)")
+        .accessibilityIdentifier("message.version")
+      Button {
+        actions.selectVersion(versions[index + 1])
+      } label: {
+        Image(systemName: "chevron.right")
+          .frame(width: 32, height: DS.controlTarget)
+      }
+      .disabled(index + 1 >= versions.count || actions.isBusy)
+      .accessibilityLabel("Next version")
+      .accessibilityIdentifier("message.version.next")
+    }
+    .font(.subheadline)
+    .foregroundStyle(.secondary)
+    .buttonStyle(.borderless)
+  }
+
+  private func copy(_ text: String) {
+    UIPasteboard.general.string = text
+    Haptics.complete()
+    copied = true
+    Task {
+      try? await Task.sleep(for: .seconds(1.5))
+      copied = false
     }
   }
 
